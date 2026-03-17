@@ -179,9 +179,9 @@ void ShellyHTDisplay::check_and_update_() {
     if (rssi > -50) new_bars = 4; else if (rssi > -65) new_bars = 3;
     else if (rssi > -75) new_bars = 2; else if (rssi > -85) new_bars = 1;
   }
+  uint8_t level = 0;
   if (this->batt_sensor_ && this->batt_sensor_->has_state()) {
-    float v = this->batt_sensor_->state;
-    uint8_t level = 0;
+    float v = this->batt_sensor_->state;    
     if (v > 5.8f) level = 5; else if (v > 5.4f) level = 4;
     else if (v > 5.0f) level = 3; else if (v > 4.6f) level = 2;
     else if (v > 4.2f) level = 1;    
