@@ -11,8 +11,31 @@ namespace uc8119 {
 
 static const char *const TAG = "shelly_ht";
 
-// Battery voltage below this = no battery = USB powered
-static const float USB_DETECT_VOLTAGE = 1.0f;
+void ShellyHTDisplay::setup() {
+  ESP_LOGI(TAG, "Shelly H&T display layer ready");
+  this->last_check_ms_ = millis();
+}
+
+void ShellyHTDisplay::loop() {
+  if (!this->display_ || !this->display_->is_ready()) return;
+  uint32_t now = millis();
+
+  if (now - this->last_check_ms_ < this->check_interval_ms_) return;
+
+  this->last_check_ms_ = now;
+  this->check_and_update_();
+
+}
+
+void ShellyHTDisplay::dump_config() {
+  ESP_LOGCONFIG(TAG, "Shelly H&T Gen3 Display:");  
+  ESP_LOGCONFIG(TAG, "  Font: %s", this->font_ == FONT_SIEKOO ? "siekoo" : "classic");
+  ESP_LOGCONFIG(TAG, "  Check interval: %ums", this->check_interval_ms_);
+  ESP_LOGCONFIG(TAG, "  Sensors: temp=%s humi=%s batt=%s wifi=%s time=%s",
+    this->temp_sensor_ ? "yes" : "no", this->humi_sensor_ ? "yes" : "no",
+    this->batt_sensor_ ? "yes" : "no", this->wifi_sensor_ ? "yes" : "no",
+    this->time_ ? "yes" : "no");
+}
 
 // ── 7-segment helpers ───────────────────────────────────────────
 
@@ -105,8 +128,6 @@ void ShellyHTDisplay::show_battery(uint8_t l) {
   // Hide battery icon only when USB-powered (no battery present)
   // Show in all other cases: deep-sleep with battery, always-on with battery
   if (this->usb_powered_) return;
-  if (this->batt_sensor_ && this->batt_sensor_->has_state() &&
-      this->batt_sensor_->state < USB_DETECT_VOLTAGE) return;
   if (l > 5) l = 5;
   this->display_->set_segment(SEG_BATT[4], true);  // Frame always on
   for (int i = 0; i < 4; i++) this->display_->set_segment(SEG_BATT[i], l >= (i + 1));
@@ -135,56 +156,6 @@ void ShellyHTDisplay::show_colon(bool on) {
   this->display_->set_segment(SEG_COL_TOP, on);
 }
 
-// ── OTA progress display ────────────────────────────────────────
-
-void ShellyHTDisplay::show_ota_begin() {
-  this->ota_active_ = true;
-  this->display_->clear();
-  // Siekoo: S=ACDF (unfamiliar), 5=ACDFG (looks like classic S)
-  this->show_text_clock(this->font_ == FONT_SIEKOO ? " E5P" : " ESP");
-  this->show_text_big("otA");
-  this->write_digit_(DIG_H1, S7_BLANK);
-  this->write_digit_(DIG_H2, SK_DOT);
-  this->display_->commit();
-  ESP_LOGI(TAG, "OTA started — display locked");
-}
-
-void ShellyHTDisplay::show_ota_progress(float progress) {
-  if (!this->ota_active_) return;
-
-  // Progress animation on H1+H2:
-  //   0-33%  →  N     66-99%  →  W
-  //  33-66%  →  M     100%    →  !
-  uint8_t h1 = S7_BLANK, h2 = S7_BLANK;
-  if (progress >= 100.0f)     { h2 = SK_EXCLAIM; }
-  else if (progress >= 66.0f) { h2 = SK_W; }
-  else if (progress >= 33.0f) { h2 = SK_M; }
-  else                        { h2 = SK_N; }
-
-  this->write_digit_(DIG_H1, h1);
-  this->write_digit_(DIG_H2, h2);
-  this->display_->commit();
-}
-
-void ShellyHTDisplay::show_ota_end() {
-  this->display_->clear();
-  this->show_text_clock("donE");
-  this->write_digit_(DIG_H1, S7_BLANK);
-  this->write_digit_(DIG_H2, SK_EXCLAIM);
-  this->display_->commit();
-  ESP_LOGI(TAG, "OTA complete");
-}
-
-void ShellyHTDisplay::show_ota_error() {
-  this->display_->clear();
-  this->show_text_clock("Err ");
-  this->show_text_big("otA");
-  this->display_->commit();
-  ESP_LOGW(TAG, "OTA error");
-  this->ota_active_ = false;
-  this->force_refresh();
-}
-
 // ── Internal state machine ──────────────────────────────────────
 
 void ShellyHTDisplay::check_and_update_() {
@@ -208,6 +179,13 @@ void ShellyHTDisplay::check_and_update_() {
     if (rssi > -50) new_bars = 4; else if (rssi > -65) new_bars = 3;
     else if (rssi > -75) new_bars = 2; else if (rssi > -85) new_bars = 1;
   }
+  uint8_t level = 0;
+  if (this->batt_sensor_ && this->batt_sensor_->has_state()) {
+    float v = this->batt_sensor_->state;    
+    if (v > 5.8f) level = 5; else if (v > 5.4f) level = 4;
+    else if (v > 5.0f) level = 3; else if (v > 4.6f) level = 2;
+    else if (v > 4.2f) level = 1;    
+  }
   bool new_wifi = wifi::global_wifi_component->is_connected();
   bool new_frost = this->temp_sensor_->state < 3.0f;
 
@@ -219,12 +197,15 @@ void ShellyHTDisplay::check_and_update_() {
 
   if (!changed) return;
 
-  ESP_LOGI(TAG, "Update: %.1f°C %d%% %02d:%02d sig:%d wifi:%d frost:%d",
-           new_temp / 10.0f, new_humi, new_hour, new_min, new_bars, new_wifi, new_frost);
+  ESP_LOGD(TAG, "Update: %.1f°C %d%% %02d:%02d sig:%d wifi:%d frost:%d battery:%d",
+           new_temp / 10.0f, new_humi, new_hour, new_min, new_bars, new_wifi, new_frost, level);
 
-  this->disp_temp_ = new_temp; this->disp_humi_ = new_humi;
-  this->disp_hour_ = new_hour; this->disp_min_  = new_min;
-  this->disp_bars_ = new_bars; this->disp_wifi_ = new_wifi;
+  this->disp_temp_ = new_temp; 
+  this->disp_humi_ = new_humi;
+  this->disp_hour_ = new_hour; 
+  this->disp_min_  = new_min;
+  this->disp_bars_ = new_bars; 
+  this->disp_wifi_ = new_wifi;
   this->disp_frost_ = new_frost;
 
   // Build framebuffer
@@ -235,70 +216,57 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_signal(new_bars);
   this->show_globe(new_wifi);
   this->show_frost(new_frost);
-
-  if (this->batt_sensor_ && this->batt_sensor_->has_state()) {
-    float v = this->batt_sensor_->state;
-    uint8_t level = 0;
-    if (v > 5.8f) level = 5; else if (v > 5.4f) level = 4;
-    else if (v > 5.0f) level = 3; else if (v > 4.6f) level = 2;
-    else if (v > 4.2f) level = 1;
-    this->show_battery(level);
-  }
+  this->show_battery(level);
 
   this->display_->commit();
 }
 
-// ── Lifecycle ───────────────────────────────────────────────────
 
-void ShellyHTDisplay::setup() {
-  ESP_LOGI(TAG, "Shelly H&T display layer ready (%s, auto-detected)",
-           this->deep_sleep_mode_ ? "deep-sleep" : "always-on");
-  this->last_check_ms_ = millis();
+// ── OTA progress display ────────────────────────────────────────
+
+void ShellyHTDisplay::show_ota_begin() {
+  this->ota_active_ = true;
+  this->display_->clear();
+  // Siekoo: S=ACDF (unfamiliar), 5=ACDFG (looks like classic S)
+  this->show_text_clock(this->font_ == FONT_SIEKOO ? " E5P" : " ESP");
+  this->show_text_big("otA");
+  this->write_digit_(DIG_H1, S7_BLANK);
+  this->write_digit_(DIG_H2, SK_DOT);
+  this->display_->commit();
+  ESP_LOGD(TAG, "OTA started — display locked");
 }
 
-void ShellyHTDisplay::loop() {
-  if (!this->display_ || !this->display_->is_ready()) return;
-
-  // ── USB detection: override deep-sleep at runtime ─────────
-  // If deep_sleep is configured but battery reads ~0V → USB powered
-  // → switch to always-on mode and prevent deep sleep
-  if (this->deep_sleep_mode_ && !this->usb_powered_ &&
-      this->batt_sensor_ && this->batt_sensor_->has_state()) {
-    float v = this->batt_sensor_->state;
-    if (v < USB_DETECT_VOLTAGE) {
-      ESP_LOGI(TAG, "USB power detected (battery=%.1fV < %.1fV) — switching to always-on mode",
-               v, USB_DETECT_VOLTAGE);
-      this->usb_powered_ = true;
-      this->deep_sleep_mode_ = false;
-#ifdef USE_DEEP_SLEEP
-      if (this->deep_sleep_ != nullptr) {
-        this->deep_sleep_->prevent_deep_sleep();
-        ESP_LOGI(TAG, "Deep sleep prevented");
-      }
-#endif
-      this->force_refresh();  // Redraw without battery icon
-    }
-  }
-
-  if (this->deep_sleep_mode_) return;
-
-  uint32_t now = millis();
-  if (now - this->last_check_ms_ < this->check_interval_ms_) return;
-  this->last_check_ms_ = now;
-
-  this->check_and_update_();
+void ShellyHTDisplay::show_ota_progress(float progress) {
+  if (!this->ota_active_) return;
+  uint8_t h1 = S7_BLANK, h2 = S7_BLANK;
+  if (progress >= 100.0f)     { h2 = SK_EXCLAIM; }
+  else if (progress >= 66.0f) { h2 = SK_K; }
+  else if (progress >= 33.0f) { h2 = SK_M; }
+  else                        { h2 = SK_N; }
+  this->write_digit_(DIG_H1, h1);
+  this->write_digit_(DIG_H2, h2);
+  this->display_->commit();
 }
 
-void ShellyHTDisplay::dump_config() {
-  ESP_LOGCONFIG(TAG, "Shelly H&T Gen3 Display:");
-  ESP_LOGCONFIG(TAG, "  Mode: %s (auto-detected from YAML)", this->deep_sleep_mode_ ? "deep-sleep" : "always-on");
-  ESP_LOGCONFIG(TAG, "  Font: %s", this->font_ == FONT_SIEKOO ? "siekoo" : "classic");
-  ESP_LOGCONFIG(TAG, "  Check interval: %ums", this->check_interval_ms_);
-  ESP_LOGCONFIG(TAG, "  Sensors: temp=%s humi=%s batt=%s wifi=%s time=%s",
-    this->temp_sensor_ ? "yes" : "no", this->humi_sensor_ ? "yes" : "no",
-    this->batt_sensor_ ? "yes" : "no", this->wifi_sensor_ ? "yes" : "no",
-    this->time_ ? "yes" : "no");
+void ShellyHTDisplay::show_ota_end() {
+  this->display_->clear();
+  this->show_text_clock("donE");
+  this->write_digit_(DIG_H1, S7_BLANK);
+  this->write_digit_(DIG_H2, SK_EXCLAIM);
+  this->display_->commit();
+  ESP_LOGD(TAG, "OTA complete");
 }
+
+void ShellyHTDisplay::show_ota_error() {
+  this->display_->clear();
+  this->show_text_clock("Err ");
+  this->show_text_big("otA");
+  this->display_->commit();
+  ESP_LOGE(TAG, "OTA error");
+  this->ota_active_ = false;
+  this->force_refresh();
+}
+
 
 }  // namespace uc8119
 }  // namespace esphome

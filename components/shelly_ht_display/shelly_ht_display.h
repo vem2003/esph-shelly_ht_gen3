@@ -70,8 +70,8 @@ class ShellyHTDisplay : public PollingComponent {
   // Config
   void set_display(UC8119 *d) { this->display_ = d; }
   void set_check_interval(uint32_t ms) { this->check_interval_ms_ = ms; }
-  void set_deep_sleep_mode(bool v) { this->deep_sleep_mode_ = v; }
   void set_font(SegmentFont f) { this->font_ = f; }
+  void set_usb_powered(bool p) { this->usb_powered_ = p;}
 
   // Sensor references
   void set_temperature_sensor(sensor::Sensor *s) { this->temp_sensor_ = s; }
@@ -79,7 +79,6 @@ class ShellyHTDisplay : public PollingComponent {
   void set_battery_sensor(sensor::Sensor *s) { this->batt_sensor_ = s; }
   void set_wifi_signal_sensor(sensor::Sensor *s) { this->wifi_sensor_ = s; }
   void set_time(time::RealTimeClock *t) { this->time_ = t; }
-  void set_deep_sleep_component(deep_sleep::DeepSleepComponent *ds) { this->deep_sleep_ = ds; }
 
   // ── High-level display API (usable from lambdas) ─────────────
 
@@ -118,13 +117,10 @@ class ShellyHTDisplay : public PollingComponent {
   /// Force display refresh
   void force_refresh() { this->disp_temp_ = -999; }
 
-  /// Check if currently in deep sleep mode
-  bool is_deep_sleep_mode() const { return this->deep_sleep_mode_; }
 
  protected:
   UC8119 *display_{nullptr};
   uint32_t check_interval_ms_{1000};
-  bool deep_sleep_mode_{false};
   bool usb_powered_{false};
   SegmentFont font_{FONT_SIEKOO};
   bool ota_active_{false};       // Runtime: USB detected, deep sleep prevented
@@ -135,7 +131,6 @@ class ShellyHTDisplay : public PollingComponent {
   sensor::Sensor *batt_sensor_{nullptr};
   sensor::Sensor *wifi_sensor_{nullptr};
   time::RealTimeClock *time_{nullptr};
-  deep_sleep::DeepSleepComponent *deep_sleep_{nullptr};
 
   // Display state (what's currently shown)
   int disp_temp_{-999};

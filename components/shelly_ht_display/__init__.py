@@ -21,6 +21,7 @@ CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_BATTERY_SENSOR = "battery_sensor"
 CONF_WIFI_SIGNAL_SENSOR = "wifi_signal_sensor"
 CONF_CHECK_INTERVAL = "check_interval"
+CONF_USB_POWERED = "usb_powered"
 CONF_FONT = "font"
 
 # C++ enum values
@@ -42,6 +43,7 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_TIME_ID): cv.use_id(time_comp.RealTimeClock),
             cv.Optional(CONF_CHECK_INTERVAL, default="1s"): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_FONT, default="siekoo"): cv.enum(FONT_OPTIONS, lower=True),
+            cv.Optional(CONF_USB_POWERED, default=False): cv.boolean,
         }
     )
     .extend(cv.polling_component_schema("never"))
@@ -56,17 +58,7 @@ async def to_code(config):
     cg.add(var.set_display(display))
     cg.add(var.set_check_interval(config[CONF_CHECK_INTERVAL]))
     cg.add(var.set_font(config[CONF_FONT]))
-
-    # Auto-detect: deep_sleep component in YAML → deep_sleep_mode = true
-    is_deep_sleep = "deep_sleep" in CORE.config
-    cg.add(var.set_deep_sleep_mode(is_deep_sleep))
-
-    if is_deep_sleep:
-        # Pass reference so we can call prevent_deep_sleep() at runtime
-        ds_conf = CORE.config["deep_sleep"]
-        if CONF_ID in ds_conf:
-            ds = await cg.get_variable(ds_conf[CONF_ID])
-            cg.add(var.set_deep_sleep_component(ds))
+    cg.add(var.set_usb_powered(config[CONF_USB_POWERED]))
 
     if CONF_TEMPERATURE_SENSOR in config:
         s = await cg.get_variable(config[CONF_TEMPERATURE_SENSOR])
