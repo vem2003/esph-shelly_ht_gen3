@@ -102,7 +102,7 @@ void ShellyHTDisplay::show_battery(uint8_t l) {
   // Hide battery icon only when USB-powered (no battery present)
   // Show in all other cases: deep-sleep with battery, always-on with battery
   if (this->usb_powered_) return;
-  if (this->batt_sensor_ && this->batt_sensor_->has_state()) return;
+  //if (!this->batt_sensor_ && !this->batt_sensor_->has_state()) return;
   if (l > 5) l = 5;
   this->display_->set_segment(SEG_BATT[4], true);  // Frame always on
   for (int i = 0; i < 4; i++) this->display_->set_segment(SEG_BATT[i], l >= (i + 1));
