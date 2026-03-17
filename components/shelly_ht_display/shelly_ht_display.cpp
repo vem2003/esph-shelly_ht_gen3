@@ -11,9 +11,6 @@ namespace uc8119 {
 
 static const char *const TAG = "shelly_ht";
 
-// Battery voltage below this = no battery = USB powered
-static const float USB_DETECT_VOLTAGE = 1.0f;
-
 // ── 7-segment helpers ───────────────────────────────────────────
 
 void ShellyHTDisplay::write_digit_(const DigitMap &d, uint8_t c) {
@@ -105,8 +102,7 @@ void ShellyHTDisplay::show_battery(uint8_t l) {
   // Hide battery icon only when USB-powered (no battery present)
   // Show in all other cases: deep-sleep with battery, always-on with battery
   if (this->usb_powered_) return;
-  if (this->batt_sensor_ && this->batt_sensor_->has_state() &&
-      this->batt_sensor_->state < USB_DETECT_VOLTAGE) return;
+  if (this->batt_sensor_ && this->batt_sensor_->has_state()) return;
   if (l > 5) l = 5;
   this->display_->set_segment(SEG_BATT[4], true);  // Frame always on
   for (int i = 0; i < 4; i++) this->display_->set_segment(SEG_BATT[i], l >= (i + 1));
@@ -146,21 +142,16 @@ void ShellyHTDisplay::show_ota_begin() {
   this->write_digit_(DIG_H1, S7_BLANK);
   this->write_digit_(DIG_H2, SK_DOT);
   this->display_->commit();
-  ESP_LOGI(TAG, "OTA started — display locked");
+  ESP_LOGD(TAG, "OTA started — display locked");
 }
 
 void ShellyHTDisplay::show_ota_progress(float progress) {
   if (!this->ota_active_) return;
-
-  // Progress animation on H1+H2:
-  //   0-33%  →  N     66-99%  →  W
-  //  33-66%  →  M     100%    →  !
   uint8_t h1 = S7_BLANK, h2 = S7_BLANK;
   if (progress >= 100.0f)     { h2 = SK_EXCLAIM; }
-  else if (progress >= 66.0f) { h2 = SK_W; }
+  else if (progress >= 66.0f) { h2 = SK_K; }
   else if (progress >= 33.0f) { h2 = SK_M; }
   else                        { h2 = SK_N; }
-
   this->write_digit_(DIG_H1, h1);
   this->write_digit_(DIG_H2, h2);
   this->display_->commit();
@@ -172,7 +163,7 @@ void ShellyHTDisplay::show_ota_end() {
   this->write_digit_(DIG_H1, S7_BLANK);
   this->write_digit_(DIG_H2, SK_EXCLAIM);
   this->display_->commit();
-  ESP_LOGI(TAG, "OTA complete");
+  ESP_LOGD(TAG, "OTA complete");
 }
 
 void ShellyHTDisplay::show_ota_error() {
@@ -180,7 +171,7 @@ void ShellyHTDisplay::show_ota_error() {
   this->show_text_clock("Err ");
   this->show_text_big("otA");
   this->display_->commit();
-  ESP_LOGW(TAG, "OTA error");
+  ESP_LOGE(TAG, "OTA error");
   this->ota_active_ = false;
   this->force_refresh();
 }
@@ -219,7 +210,7 @@ void ShellyHTDisplay::check_and_update_() {
 
   if (!changed) return;
 
-  ESP_LOGI(TAG, "Update: %.1f°C %d%% %02d:%02d sig:%d wifi:%d frost:%d",
+  ESP_LOGD(TAG, "Update: %.1f°C %d%% %02d:%02d sig:%d wifi:%d frost:%d",
            new_temp / 10.0f, new_humi, new_hour, new_min, new_bars, new_wifi, new_frost);
 
   this->disp_temp_ = new_temp; this->disp_humi_ = new_humi;
@@ -248,41 +239,15 @@ void ShellyHTDisplay::check_and_update_() {
   this->display_->commit();
 }
 
-// ── Lifecycle ───────────────────────────────────────────────────
-
 void ShellyHTDisplay::setup() {
-  ESP_LOGI(TAG, "Shelly H&T display layer ready (%s, auto-detected)",
-           this->deep_sleep_mode_ ? "deep-sleep" : "always-on");
+  ESP_LOGI(TAG, "Shelly H&T display layer ready");
   this->last_check_ms_ = millis();
 }
 
 void ShellyHTDisplay::loop() {
   if (!this->display_ || !this->display_->is_ready()) return;
-
-  // ── USB detection: override deep-sleep at runtime ─────────
-  // If deep_sleep is configured but battery reads ~0V → USB powered
-  // → switch to always-on mode and prevent deep sleep
-  if (this->deep_sleep_mode_ && !this->usb_powered_ &&
-      this->batt_sensor_ && this->batt_sensor_->has_state()) {
-    float v = this->batt_sensor_->state;
-    if (v < USB_DETECT_VOLTAGE) {
-      ESP_LOGI(TAG, "USB power detected (battery=%.1fV < %.1fV) — switching to always-on mode",
-               v, USB_DETECT_VOLTAGE);
-      this->usb_powered_ = true;
-      this->deep_sleep_mode_ = false;
-#ifdef USE_DEEP_SLEEP
-      if (this->deep_sleep_ != nullptr) {
-        this->deep_sleep_->prevent_deep_sleep();
-        ESP_LOGI(TAG, "Deep sleep prevented");
-      }
-#endif
-      this->force_refresh();  // Redraw without battery icon
-    }
-  }
-
-  if (this->deep_sleep_mode_) return;
-
   uint32_t now = millis();
+
   if (now - this->last_check_ms_ < this->check_interval_ms_) return;
   this->last_check_ms_ = now;
 
@@ -290,8 +255,7 @@ void ShellyHTDisplay::loop() {
 }
 
 void ShellyHTDisplay::dump_config() {
-  ESP_LOGCONFIG(TAG, "Shelly H&T Gen3 Display:");
-  ESP_LOGCONFIG(TAG, "  Mode: %s (auto-detected from YAML)", this->deep_sleep_mode_ ? "deep-sleep" : "always-on");
+  ESP_LOGCONFIG(TAG, "Shelly H&T Gen3 Display:");  
   ESP_LOGCONFIG(TAG, "  Font: %s", this->font_ == FONT_SIEKOO ? "siekoo" : "classic");
   ESP_LOGCONFIG(TAG, "  Check interval: %ums", this->check_interval_ms_);
   ESP_LOGCONFIG(TAG, "  Sensors: temp=%s humi=%s batt=%s wifi=%s time=%s",
