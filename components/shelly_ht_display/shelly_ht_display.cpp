@@ -255,7 +255,7 @@ void ShellyHTDisplay::check_and_update_() {
                  (new_arrow    != this->disp_arrow_);
 
   if (!changed) return;
-  ESP_LOGI(TAG, "Update: %.1f°C %d%% %02d:%02d sig:%d wifi:%d frost:%d heat:%d vent:%d bt:%d cal:%d arr:%d battery:%d",
+  ESP_LOGD(TAG, "Update: %.1f°C %d%% %02d:%02d sig:%d globe:%d frost:%d heat:%d vent:%d bt:%d cal:%d arr:%d battery:%d",
            new_temp / 10.0f, new_humi, new_hour, new_min, new_bars,
            new_wifi, new_frost, new_heating, new_vent, new_bt, new_calendar, new_arrow, level);           
   // Save states
