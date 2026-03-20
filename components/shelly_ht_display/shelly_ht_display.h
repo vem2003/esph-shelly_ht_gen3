@@ -134,7 +134,7 @@ class ShellyHTDisplay : public PollingComponent {
   bool ota_active_{false};
 
   // USB detection
-  GPIOPin *usb_detect_pin_{nullptr};  // HIGH=USB, LOW=battery (GPIO19 on Shelly)
+  GPIOPin *usb_detect_pin_{nullptr};  // HIGH=USB, LOW=battery (GPIO8 on Shelly)
 
   // Deep sleep WiFi optimization
   uint32_t wifi_update_every_{5};

@@ -65,7 +65,7 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_FONT, default="siekoo"): cv.enum(FONT_OPTIONS, lower=True),
             # Deep sleep optimization
             cv.Optional(CONF_WIFI_UPDATE_EVERY, default=5): cv.uint32_t,
-            # USB detection pin (HIGH=USB, LOW=battery). On Shelly H&T Gen3: GPIO19 (USB D+)
+            # USB detection pin (HIGH=USB, LOW=battery). On Shelly H&T Gen3: GPIO8
             cv.Optional(CONF_USB_DETECT_PIN): pins.gpio_input_pin_schema,
             # Lambda hook
             cv.Optional(CONF_ON_UPDATE): automation.validate_automation(single=True),

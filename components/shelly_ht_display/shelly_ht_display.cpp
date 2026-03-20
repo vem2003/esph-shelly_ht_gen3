@@ -236,7 +236,6 @@ void ShellyHTDisplay::check_and_update_() {
     if (now.is_valid()) {
       new_hour = now.hour;
       new_min = now.minute;
-      this->save_time_to_rtc_();
     }
   }
 
@@ -290,6 +289,11 @@ void ShellyHTDisplay::check_and_update_() {
   this->disp_vent_ = new_vent;       this->disp_bt_ = new_bt;
   this->disp_calendar_ = new_calendar; this->disp_arrow_ = new_arrow;
 
+  // Save HA-synced time to RTC (only on WiFi cycles when time changed)
+  if (!this->wifi_skipped_ && new_hour >= 0) {
+    this->save_time_to_rtc_();
+  }
+
   // Build framebuffer
   this->display_->clear();
   this->show_temperature(this->temp_sensor_->state, false);
@@ -327,7 +331,7 @@ void ShellyHTDisplay::check_and_update_() {
 // ── Lifecycle ───────────────────────────────────────────────────
 
 void ShellyHTDisplay::setup() {
-  // USB detection via pin (e.g. GPIO19 = USB D+ on Shelly H&T Gen3)
+  // USB detection via pin (e.g. GPIO8 on Shelly H&T Gen3)
   if (this->usb_detect_pin_) {
     this->usb_detect_pin_->setup();
     this->usb_powered_ = this->usb_detect_pin_->digital_read();
