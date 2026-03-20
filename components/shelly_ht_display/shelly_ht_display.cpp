@@ -1,9 +1,6 @@
 #include "shelly_ht_display.h"
 #include "esphome/core/log.h"
 #include "esphome/components/wifi/wifi_component.h"
-#ifdef USE_DEEP_SLEEP
-#include "esphome/components/deep_sleep/deep_sleep_component.h"
-#endif
 #include <cmath>
 
 // RTC memory for time tracking across deep sleep cycles
@@ -12,11 +9,15 @@ static RTC_DATA_ATTR uint32_t rtc_time_magic;
 static RTC_DATA_ATTR int16_t  rtc_saved_hour;
 static RTC_DATA_ATTR int16_t  rtc_saved_min;
 static RTC_DATA_ATTR uint32_t rtc_wake_count;
+static RTC_DATA_ATTR int16_t  rtc_saved_temp;   // temp * 10 (e.g. 235 = 23.5°C)
+static RTC_DATA_ATTR int16_t  rtc_saved_humi;   // humidity (e.g. 67)
 #else
 static uint32_t rtc_time_magic;
 static int16_t  rtc_saved_hour;
 static int16_t  rtc_saved_min;
 static uint32_t rtc_wake_count;
+static int16_t  rtc_saved_temp;
+static int16_t  rtc_saved_humi;
 #endif
 static const uint32_t RTC_TIME_MAGIC = 0x54494D45;  // "TIME"
 
@@ -31,23 +32,17 @@ void ShellyHTDisplay::save_time_to_rtc_() {
   if (this->disp_hour_ < 0) return;
   rtc_saved_hour = this->disp_hour_;
   rtc_saved_min = this->disp_min_;
+  rtc_saved_temp = this->disp_temp_;
+  rtc_saved_humi = this->disp_humi_;
   rtc_time_magic = RTC_TIME_MAGIC;
-  ESP_LOGD(TAG, "RTC save %02d:%02d cycle %u", rtc_saved_hour, rtc_saved_min, rtc_wake_count);
+  ESP_LOGD(TAG, "RTC save %02d:%02d %.1f°C %d%%",
+           rtc_saved_hour, rtc_saved_min, rtc_saved_temp / 10.0f, rtc_saved_humi);
 }
 
 bool ShellyHTDisplay::load_time_from_rtc_() {
   if (rtc_time_magic != RTC_TIME_MAGIC) return false;
   ESP_LOGD(TAG, "RTC load %02d:%02d cycle %u", rtc_saved_hour, rtc_saved_min, rtc_wake_count);
   return true;
-}
-
-void ShellyHTDisplay::enter_deep_sleep_() {
-#ifdef USE_DEEP_SLEEP
-  if (this->deep_sleep_ != nullptr) {
-    ESP_LOGI(TAG, "Entering deep sleep");
-    this->deep_sleep_->begin_sleep(true);
-  }
-#endif
 }
 
 // ── 7-segment helpers ───────────────────────────────────────────
@@ -110,7 +105,7 @@ void ShellyHTDisplay::show_temperature(float t, bool f) {
   else this->write_digit_(DIG_D1, S7_BLANK);
   this->write_number_(DIG_D2, ones);
   this->write_number_(DIG_D3, dec);
-  this->show_dp(true);     // Decimal point between D2 and D3
+  this->show_dp(true);
   this->show_degree(true);
   char unit_c = (this->font_ == FONT_SIEKOO) ? '(' : 'C';
   this->show_unit(f ? 'F' : unit_c);
@@ -146,7 +141,6 @@ void ShellyHTDisplay::show_text_clock(const char *t) {
 // ── Icons ───────────────────────────────────────────────────────
 
 void ShellyHTDisplay::show_battery(uint8_t l) {
-  if (this->usb_powered_) return;
   if (l > 5) l = 5;
   this->display_->set_segment(SEG_BATT[4], true);  // Frame always on
   for (int i = 0; i < 4; i++) this->display_->set_segment(SEG_BATT[i], l >= (i + 1));
@@ -227,11 +221,24 @@ void ShellyHTDisplay::check_and_update_() {
 
   bool has_t = this->temp_sensor_ && this->temp_sensor_->has_state();
   bool has_h = this->humi_sensor_ && this->humi_sensor_->has_state();
-  if (!has_t || !has_h) return;
 
-  // Collect current values (RAM only, no I2C)
-  int new_temp = (int)roundf(this->temp_sensor_->state * 10.0f);
-  int new_humi = (int)this->humi_sensor_->state;
+  int new_temp, new_humi;
+  float raw_temp;
+
+  if (has_t && has_h) {
+    // Fresh sensor data available
+    new_temp = (int)roundf(this->temp_sensor_->state * 10.0f);
+    new_humi = (int)this->humi_sensor_->state;
+    raw_temp = this->temp_sensor_->state;
+  } else if (this->wifi_skipped_ && rtc_time_magic == RTC_TIME_MAGIC) {
+    // Non-WiFi wake: sensor hasn't read yet, use RTC fallback
+    new_temp = rtc_saved_temp;
+    new_humi = rtc_saved_humi;
+    raw_temp = rtc_saved_temp / 10.0f;
+    ESP_LOGD(TAG, "Sensor not ready, using RTC: %.1f°C %d%%", raw_temp, new_humi);
+  } else {
+    return;  // No data available
+  }
 
   // Time: use RTC time if WiFi was skipped, otherwise HA time
   int new_hour = -1, new_min = -1;
@@ -259,7 +266,7 @@ void ShellyHTDisplay::check_and_update_() {
   }
 
   // Icon states
-  bool def_frost = this->temp_sensor_->state < 3.0f;
+  bool def_frost = raw_temp < 3.0f;
 
   bool new_frost    = this->get_icon_state_(this->frost_sensor_, def_frost);
   bool new_heating  = this->get_icon_state_(this->heating_sensor_, false);
@@ -303,7 +310,7 @@ void ShellyHTDisplay::check_and_update_() {
 
   // Build framebuffer
   this->display_->clear();
-  this->show_temperature(this->temp_sensor_->state, false);
+  this->show_temperature(raw_temp, false);
   this->show_humidity(new_humi);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
@@ -317,44 +324,22 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_calendar(new_calendar);
   this->show_arrow(new_arrow);
 
-  // Battery: show in deep-sleep mode (on battery), hide on USB
-  if (this->deep_sleep_mode_ && !this->usb_powered_) {
-    this->show_battery(5);  // No usable ADC — show full when on battery
-  }
-
-  // Fire on_update trigger
+  // Fire on_update trigger (battery icon, icon overrides, etc.)
   this->on_update_trigger_.trigger();
 
   // Commit
   this->display_->commit();
 
-  // Non-WiFi cycle: display is done, save time and enter deep sleep immediately
+  // Non-WiFi cycle: display is done, fire on_ready for power_off + sleep
   if (this->wifi_skipped_) {
     this->save_time_to_rtc_();
-    this->enter_deep_sleep_();
+    this->on_ready_trigger_.trigger();
   }
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────
 
 void ShellyHTDisplay::setup() {
-  // USB detection via pin (e.g. GPIO8 on Shelly H&T Gen3)
-  if (this->usb_detect_pin_) {
-    this->usb_detect_pin_->setup();
-    this->usb_powered_ = this->usb_detect_pin_->digital_read();
-    ESP_LOGD(TAG, "USB detect: %s", this->usb_powered_ ? "USB" : "battery");
-
-    if (this->usb_powered_ && this->deep_sleep_mode_) {
-      ESP_LOGI(TAG, "USB detected, always-on");
-      this->deep_sleep_mode_ = false;
-#ifdef USE_DEEP_SLEEP
-      if (this->deep_sleep_ != nullptr) {
-        this->deep_sleep_->prevent_deep_sleep();
-      }
-#endif
-    }
-  }
-
   // Deep sleep WiFi optimization
   if (this->deep_sleep_mode_ && this->wifi_update_every_ > 0) {
     if (this->load_time_from_rtc_()) {
@@ -384,9 +369,8 @@ void ShellyHTDisplay::setup() {
     }
   }
 
-  ESP_LOGI(TAG, "Ready (%s, usb=%s)",
-           this->deep_sleep_mode_ ? "deep-sleep" : "always-on",
-           this->usb_powered_ ? "yes" : "no");
+  ESP_LOGI(TAG, "Ready (%s)",
+           this->deep_sleep_mode_ ? "deep-sleep" : "always-on");
 }
 
 void ShellyHTDisplay::update() {
@@ -397,12 +381,10 @@ void ShellyHTDisplay::dump_config() {
   ESP_LOGCONFIG(TAG,
                 "Shelly H&T Gen3 Display:\n"
                 "  Mode: %s\n"
-                "  USB: %s\n"
                 "  Font: %s\n"
                 "  Update interval: %ums\n"
                 "  Sensors: temp=%s humi=%s batt=%s wifi=%s time=%s",
                 this->deep_sleep_mode_ ? "deep-sleep" : "always-on",
-                this->usb_powered_ ? "yes" : "no",
                 this->font_ == FONT_SIEKOO ? "siekoo" : "classic",
                 this->get_update_interval(),
                 this->temp_sensor_ ? "yes" : "no",
@@ -417,7 +399,6 @@ void ShellyHTDisplay::dump_config() {
                   this->wifi_update_every_,
                   this->sleep_duration_ms_ / 1000);
   }
-  LOG_PIN("  USB detect: ", this->usb_detect_pin_);
   ESP_LOGCONFIG(TAG,
                 "  Icons: frost=%s heat=%s vent=%s bt=%s globe=%s cal=%s arrow=%s",
                 this->frost_sensor_ ? "ext" : "def",

@@ -14,9 +14,6 @@
 #include "../uc8119/uc8119.h"
 #include "siekoo.h"
 
-// Forward declaration
-namespace esphome { namespace deep_sleep { class DeepSleepComponent; } }
-
 namespace esphome {
 namespace uc8119 {
 
@@ -66,7 +63,6 @@ class ShellyHTDisplay : public PollingComponent {
   void set_font(SegmentFont f) { this->font_ = f; }
   void set_wifi_update_every(uint32_t n) { this->wifi_update_every_ = n; }
   void set_sleep_duration(uint32_t ms) { this->sleep_duration_ms_ = ms; }
-  void set_usb_detect_pin(GPIOPin *pin) { this->usb_detect_pin_ = pin; }
 
   // Analog sensor references
   void set_temperature_sensor(sensor::Sensor *s) { this->temp_sensor_ = s; }
@@ -74,7 +70,6 @@ class ShellyHTDisplay : public PollingComponent {
   void set_battery_sensor(sensor::Sensor *s) { this->batt_sensor_ = s; }
   void set_wifi_signal_sensor(sensor::Sensor *s) { this->wifi_sensor_ = s; }
   void set_time(time::RealTimeClock *t) { this->time_ = t; }
-  void set_deep_sleep_component(deep_sleep::DeepSleepComponent *ds) { this->deep_sleep_ = ds; }
 
   // Icon binary_sensor overrides
   void set_frost_sensor(binary_sensor::BinarySensor *s) { this->frost_sensor_ = s; }
@@ -85,8 +80,9 @@ class ShellyHTDisplay : public PollingComponent {
   void set_calendar_sensor(binary_sensor::BinarySensor *s) { this->calendar_sensor_ = s; }
   void set_arrow_sensor(binary_sensor::BinarySensor *s) { this->arrow_sensor_ = s; }
 
-  // on_update trigger
+  // Triggers
   Trigger<> *get_on_update_trigger() { return &this->on_update_trigger_; }
+  Trigger<> *get_on_ready_trigger() { return &this->on_ready_trigger_; }
 
   // ── High-level display API (usable from lambdas) ─────────────
 
@@ -120,18 +116,13 @@ class ShellyHTDisplay : public PollingComponent {
 
   void force_refresh() { this->disp_temp_ = -999; }
   bool is_deep_sleep_mode() const { return this->deep_sleep_mode_; }
-  bool is_usb_powered() const { return this->usb_powered_; }
   bool is_wifi_skipped() const { return this->wifi_skipped_; }
 
  protected:
   UC8119 *display_{nullptr};
   bool deep_sleep_mode_{false};
-  bool usb_powered_{false};
   SegmentFont font_{FONT_SIEKOO};
   bool ota_active_{false};
-
-  // USB detection
-  GPIOPin *usb_detect_pin_{nullptr};  // HIGH=USB, LOW=battery (GPIO8 on Shelly)
 
   // Deep sleep WiFi optimization
   uint32_t wifi_update_every_{5};
@@ -146,7 +137,6 @@ class ShellyHTDisplay : public PollingComponent {
   sensor::Sensor *batt_sensor_{nullptr};
   sensor::Sensor *wifi_sensor_{nullptr};
   time::RealTimeClock *time_{nullptr};
-  deep_sleep::DeepSleepComponent *deep_sleep_{nullptr};
 
   // Icon binary_sensor overrides
   binary_sensor::BinarySensor *frost_sensor_{nullptr};
@@ -157,8 +147,9 @@ class ShellyHTDisplay : public PollingComponent {
   binary_sensor::BinarySensor *calendar_sensor_{nullptr};
   binary_sensor::BinarySensor *arrow_sensor_{nullptr};
 
-  // on_update trigger
+  // Triggers
   Trigger<> on_update_trigger_;
+  Trigger<> on_ready_trigger_;
 
   // Display state
   int disp_temp_{-999};
@@ -184,7 +175,6 @@ class ShellyHTDisplay : public PollingComponent {
   // RTC time tracking
   void save_time_to_rtc_();
   bool load_time_from_rtc_();
-  void enter_deep_sleep_();
 };
 
 }  // namespace uc8119

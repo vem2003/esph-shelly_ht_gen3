@@ -3,17 +3,14 @@ import esphome.config_validation as cv
 from esphome.components import sensor, binary_sensor, time as time_comp
 from esphome.const import CONF_ID, CONF_TIME_ID
 from esphome.core import CORE
-from esphome import automation, pins
+from esphome import automation
 
 DEPENDENCIES = ["uc8119"]
-CODEOWNERS = ["@alex"]
+CODEOWNERS = ["@oxynatOr"]
 
 uc8119_ns = cg.esphome_ns.namespace("uc8119")
 UC8119 = uc8119_ns.class_("UC8119")
 ShellyHTDisplay = uc8119_ns.class_("ShellyHTDisplay", cg.PollingComponent)
-
-deep_sleep_ns = cg.esphome_ns.namespace("deep_sleep")
-DeepSleepComponent = deep_sleep_ns.class_("DeepSleepComponent")
 
 CONF_DISPLAY_ID = "display_id"
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
@@ -22,8 +19,8 @@ CONF_BATTERY_SENSOR = "battery_sensor"
 CONF_WIFI_SIGNAL_SENSOR = "wifi_signal_sensor"
 CONF_FONT = "font"
 CONF_ON_UPDATE = "on_update"
+CONF_ON_READY = "on_ready"
 CONF_WIFI_UPDATE_EVERY = "wifi_update_every"
-CONF_USB_DETECT_PIN = "usb_detect_pin"
 
 # Icon binary_sensor overrides
 CONF_FROST_SENSOR = "frost_sensor"
@@ -61,12 +58,11 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_ARROW_SENSOR): cv.use_id(binary_sensor.BinarySensor),
             # Config
             cv.Optional(CONF_FONT, default="siekoo"): cv.enum(FONT_OPTIONS, lower=True),
-            # Deep sleep optimization
+            # Deep sleep: connect WiFi only every Nth wake cycle (0=always)
             cv.Optional(CONF_WIFI_UPDATE_EVERY, default=5): cv.uint32_t,
-            # USB detection pin (HIGH=USB, LOW=battery). On Shelly H&T Gen3: GPIO8
-            cv.Optional(CONF_USB_DETECT_PIN): pins.gpio_input_pin_schema,
-            # Lambda hook
+            # Triggers
             cv.Optional(CONF_ON_UPDATE): automation.validate_automation(single=True),
+            cv.Optional(CONF_ON_READY): automation.validate_automation(single=True),
         }
     )
     .extend(cv.polling_component_schema("1s"))
@@ -85,18 +81,8 @@ async def to_code(config):
     # Auto-detect deep_sleep and extract sleep_duration
     is_deep_sleep = "deep_sleep" in CORE.config
     cg.add(var.set_deep_sleep_mode(is_deep_sleep))
-    if is_deep_sleep:
-        ds_conf = CORE.config["deep_sleep"]
-        if CONF_ID in ds_conf:
-            ds = await cg.get_variable(ds_conf[CONF_ID])
-            cg.add(var.set_deep_sleep_component(ds))
-        if "sleep_duration" in ds_conf:
-            cg.add(var.set_sleep_duration(ds_conf["sleep_duration"]))
-
-    # USB detect pin
-    if CONF_USB_DETECT_PIN in config:
-        pin = await cg.gpio_pin_expression(config[CONF_USB_DETECT_PIN])
-        cg.add(var.set_usb_detect_pin(pin))
+    if is_deep_sleep and "sleep_duration" in CORE.config["deep_sleep"]:
+        cg.add(var.set_sleep_duration(CORE.config["deep_sleep"]["sleep_duration"]))
 
     # Analog sensors
     for conf_key, setter in [
@@ -127,8 +113,12 @@ async def to_code(config):
             s = await cg.get_variable(config[conf_key])
             cg.add(getattr(var, setter)(s))
 
-    # on_update lambda
+    # Triggers
     if CONF_ON_UPDATE in config:
         await automation.build_automation(
             var.get_on_update_trigger(), [], config[CONF_ON_UPDATE]
+        )
+    if CONF_ON_READY in config:
+        await automation.build_automation(
+            var.get_on_ready_trigger(), [], config[CONF_ON_READY]
         )
