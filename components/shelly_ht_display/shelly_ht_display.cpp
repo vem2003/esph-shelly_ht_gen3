@@ -5,9 +5,8 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_idf_version.h"
 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#if __has_include("esp_adc/adc_oneshot.h")
   #include "esp_adc/adc_oneshot.h"
   #include "esp_adc/adc_cali.h"
   #include "esp_adc/adc_cali_scheme.h"
