@@ -99,6 +99,7 @@ class ShellyHTDisplay : public PollingComponent {
   void set_battery_divider(float d) { this->batt_divider_ = d; }
   void set_battery_full_voltage(float v) { this->batt_v_full_ = v; }
   void set_battery_empty_voltage(float v) { this->batt_v_empty_ = v; }
+  void set_battery_update_interval(uint32_t ms) { this->batt_update_interval_ = ms; }
 
   // ── Battery output sensors ────────────────────────────────────
   void set_battery_voltage_sensor(sensor::Sensor *s) { this->batt_voltage_sensor_ = s; }
@@ -183,6 +184,8 @@ class ShellyHTDisplay : public PollingComponent {
   float batt_divider_{2.263f};
   float batt_v_full_{6.0f};
   float batt_v_empty_{4.0f};
+  uint32_t batt_update_interval_{15000};  // default 15s
+  uint32_t batt_last_read_{0};
 
   // Battery output sensors
   sensor::Sensor *batt_voltage_sensor_{nullptr};

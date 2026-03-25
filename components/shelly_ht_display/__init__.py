@@ -68,6 +68,7 @@ CONF_BATTERY_EMPTY_VOLTAGE = "battery_empty_voltage"
 CONF_BATTERY_VOLTAGE = "battery_voltage"
 CONF_BATTERY_PERCENT = "battery_percent"
 CONF_EXTERNAL_POWER = "external_power"
+CONF_BATTERY_UPDATE_INTERVAL = "battery_update_interval"
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -115,6 +116,9 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_BATTERY_DIVIDER, default=2.263): cv.float_,
             cv.Optional(CONF_BATTERY_FULL_VOLTAGE, default=6.0): cv.float_,
             cv.Optional(CONF_BATTERY_EMPTY_VOLTAGE, default=4.0): cv.float_,
+            cv.Optional(
+                CONF_BATTERY_UPDATE_INTERVAL, default="15s"
+            ): cv.positive_time_period_milliseconds,
             # ── Battery output sensors ───────────────────────────────
             cv.Optional(CONF_BATTERY_VOLTAGE): sensor.sensor_schema(
                 unit_of_measurement=UNIT_VOLT,
@@ -199,6 +203,7 @@ async def to_code(config):
     cg.add(var.set_battery_divider(config[CONF_BATTERY_DIVIDER]))
     cg.add(var.set_battery_full_voltage(config[CONF_BATTERY_FULL_VOLTAGE]))
     cg.add(var.set_battery_empty_voltage(config[CONF_BATTERY_EMPTY_VOLTAGE]))
+    cg.add(var.set_battery_update_interval(config[CONF_BATTERY_UPDATE_INTERVAL]))
 
     # ── Battery output sensors ───────────────────────────────────
     if CONF_BATTERY_VOLTAGE in config:

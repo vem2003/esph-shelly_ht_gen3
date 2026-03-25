@@ -445,7 +445,12 @@ void ShellyHTDisplay::setup() {
 }
 
 void ShellyHTDisplay::update() {
-  this->read_battery_();
+  // Throttle battery reads to battery_update_interval (first read is immediate)
+  uint32_t now = millis();
+  if (this->batt_last_read_ == 0 || (now - this->batt_last_read_ >= this->batt_update_interval_)) {
+    this->batt_last_read_ = now;
+    this->read_battery_();
+  }
   this->check_and_update_();
 }
 
