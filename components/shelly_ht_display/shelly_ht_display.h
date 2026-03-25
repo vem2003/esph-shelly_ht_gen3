@@ -22,10 +22,12 @@
 #include "esphome/components/output/binary_output.h"
 #include "esphome/components/time/real_time_clock.h"
 #include "esphome/components/voltage_sampler/voltage_sampler.h"
-#include "../uc8119/uc8119.h"
 #include "siekoo.h"
 
 namespace esphome {
+
+namespace uc8119 { class UC8119; }
+
 namespace shelly_htg3 {
 
 enum SegmentFont : uint8_t {
@@ -69,7 +71,7 @@ class ShellyHTDisplay : public PollingComponent {
   float get_setup_priority() const override { return setup_priority::PROCESSOR; }
 
   // ── General config ────────────────────────────────────────────
-  void set_display(UC8119 *d) { this->display_ = d; }
+  void set_display(uc8119::UC8119 *d) { this->display_ = d; }
   void set_deep_sleep_mode(bool v) { this->deep_sleep_mode_ = v; }
   void set_font(SegmentFont f) { this->font_ = f; }
   void set_wifi_update_every(uint32_t n) { this->wifi_update_every_ = n; }
@@ -147,7 +149,7 @@ class ShellyHTDisplay : public PollingComponent {
   bool is_wifi_skipped() const { return this->wifi_skipped_; }
 
  protected:
-  UC8119 *display_{nullptr};
+  uc8119::UC8119 *display_{nullptr};
   bool deep_sleep_mode_{false};
   SegmentFont font_{FONT_SIEKOO};
   bool ota_active_{false};

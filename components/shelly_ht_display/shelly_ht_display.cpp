@@ -1,6 +1,7 @@
 #include "shelly_ht_display.h"
 #include "esphome/core/log.h"
 #include "esphome/components/wifi/wifi_component.h"
+#include "../uc8119/uc8119.h"
 #include <cmath>
 
 // RTC memory for time tracking across deep sleep cycles
