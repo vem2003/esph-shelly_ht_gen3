@@ -19,7 +19,7 @@
 // =============================================================================
 
 namespace esphome {
-namespace uc8119 {
+namespace shelly_htg3 {
 
 // ─── Digits ─────────────────────────────────────────────────────
 //  (standard 7-segment, same as non-Siekoo)

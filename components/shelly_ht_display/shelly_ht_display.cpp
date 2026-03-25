@@ -1,6 +1,14 @@
 #include "shelly_ht_display.h"
 #include "esphome/core/log.h"
 #include "esphome/components/wifi/wifi_component.h"
+
+#include "driver/gpio.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include <cmath>
 
 // RTC memory for time tracking across deep sleep cycles
@@ -9,7 +17,7 @@ static RTC_DATA_ATTR uint32_t rtc_time_magic;
 static RTC_DATA_ATTR int16_t  rtc_saved_hour;
 static RTC_DATA_ATTR int16_t  rtc_saved_min;
 static RTC_DATA_ATTR uint32_t rtc_wake_count;
-static RTC_DATA_ATTR int16_t  rtc_saved_temp;   // temp * 10 (e.g. 235 = 23.5°C)
+static RTC_DATA_ATTR int16_t  rtc_saved_temp;   // temp * 10 (e.g. 235 = 23.5C)
 static RTC_DATA_ATTR int16_t  rtc_saved_humi;   // humidity (e.g. 67)
 #else
 static uint32_t rtc_time_magic;
@@ -22,11 +30,166 @@ static int16_t  rtc_saved_humi;
 static const uint32_t RTC_TIME_MAGIC = 0x54494D45;  // "TIME"
 
 namespace esphome {
-namespace uc8119 {
+namespace shelly_htg3 {
 
 static const char *const TAG = "shelly_ht";
 
-// ── RTC time tracking ───────────────────────────────────────────
+// ── Battery setup ──────────────────────────────────────────────
+
+void ShellyHTDisplay::setup_battery_() {
+  // Power enable pin: output, initial LOW
+  gpio_config_t pwr = {};
+  pwr.pin_bit_mask = (1ULL << this->batt_power_en_pin_);
+  pwr.mode = GPIO_MODE_OUTPUT;
+  pwr.pull_up_en = GPIO_PULLUP_DISABLE;
+  pwr.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  pwr.intr_type = GPIO_INTR_DISABLE;
+  gpio_config(&pwr);
+  gpio_set_level((gpio_num_t) this->batt_power_en_pin_, 0);
+
+  // Presence pin: input
+  gpio_config_t bp = {};
+  bp.pin_bit_mask = (1ULL << this->batt_presence_pin_);
+  bp.mode = GPIO_MODE_INPUT;
+  bp.pull_up_en = GPIO_PULLUP_DISABLE;
+  bp.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  bp.intr_type = GPIO_INTR_DISABLE;
+  gpio_config(&bp);
+
+  // ADC1 oneshot
+  adc_oneshot_unit_init_cfg_t ucfg = {};
+  ucfg.unit_id = ADC_UNIT_1;
+  ucfg.ulp_mode = ADC_ULP_MODE_DISABLE;
+
+  adc_oneshot_unit_handle_t adc = nullptr;
+  if (adc_oneshot_new_unit(&ucfg, &adc) != ESP_OK) {
+    ESP_LOGE(TAG, "Battery ADC unit init failed");
+    return;
+  }
+  this->adc_handle_ = adc;
+
+  adc_oneshot_chan_cfg_t ccfg = {};
+  ccfg.atten = ADC_ATTEN_DB_12;
+  ccfg.bitwidth = ADC_BITWIDTH_12;
+  if (adc_oneshot_config_channel(adc, (adc_channel_t) this->batt_adc_pin_, &ccfg) != ESP_OK) {
+    ESP_LOGE(TAG, "Battery ADC channel config failed (GPIO%d)", this->batt_adc_pin_);
+    return;
+  }
+
+  // Calibration (curve fitting, ESP32-C3)
+  adc_cali_curve_fitting_config_t cal = {};
+  cal.unit_id = ADC_UNIT_1;
+  cal.chan = (adc_channel_t) this->batt_adc_pin_;
+  cal.atten = ADC_ATTEN_DB_12;
+  cal.bitwidth = ADC_BITWIDTH_12;
+
+  adc_cali_handle_t cali = nullptr;
+  if (adc_cali_create_scheme_curve_fitting(&cal, &cali) == ESP_OK) {
+    this->cali_handle_ = cali;
+  } else {
+    ESP_LOGW(TAG, "Battery ADC calibration unavailable, using raw values");
+  }
+
+  this->batt_available_ = true;
+  ESP_LOGI(TAG, "Battery: ADC=GPIO%d presence=GPIO%d power_en=GPIO%d div=%.3f range=%.1f-%.1fV",
+           this->batt_adc_pin_, this->batt_presence_pin_, this->batt_power_en_pin_,
+           this->batt_divider_, this->batt_v_empty_, this->batt_v_full_);
+}
+
+// ── Battery read cycle ─────────────────────────────────────────
+
+void ShellyHTDisplay::read_battery_() {
+  if (!this->batt_available_) return;
+
+  auto adc = (adc_oneshot_unit_handle_t) this->adc_handle_;
+  auto cali = (adc_cali_handle_t) this->cali_handle_;
+
+  // Presence check
+  bool present = gpio_get_level((gpio_num_t) this->batt_presence_pin_) == 1;
+  if (this->batt_present_sensor_) this->batt_present_sensor_->publish_state(present);
+  if (this->ext_power_sensor_) this->ext_power_sensor_->publish_state(!present);
+
+  if (!present) {
+    ESP_LOGD(TAG, "Battery: USB mode, skipping ADC");
+    if (this->batt_voltage_sensor_) this->batt_voltage_sensor_->publish_state(NAN);
+    if (this->batt_percent_sensor_) this->batt_percent_sensor_->publish_state(NAN);
+    return;
+  }
+
+  if (!adc) return;
+
+  // 1) Power enable HIGH
+  gpio_set_level((gpio_num_t) this->batt_power_en_pin_, 1);
+  vTaskDelay(pdMS_TO_TICKS(10));
+
+  // 2) Multi-sample
+  int32_t sum = 0;
+  int ok = 0;
+  for (int i = 0; i < this->batt_samples_; i++) {
+    int raw;
+    if (adc_oneshot_read(adc, (adc_channel_t) this->batt_adc_pin_, &raw) == ESP_OK) {
+      sum += raw;
+      ok++;
+    }
+  }
+
+  // 3) Power enable LOW
+  gpio_set_level((gpio_num_t) this->batt_power_en_pin_, 0);
+
+  if (ok == 0) {
+    ESP_LOGW(TAG, "Battery: ADC read failed (0/%d samples)", this->batt_samples_);
+    return;
+  }
+
+  int avg = sum / ok;
+
+  // 4) Calibrated voltage
+  float v_adc;
+  if (cali) {
+    int mv;
+    adc_cali_raw_to_voltage(cali, avg, &mv);
+    v_adc = mv / 1000.0f;
+  } else {
+    v_adc = avg / 4095.0f * 3.1f;
+  }
+
+  // 5) Battery voltage + percentage
+  float v_bat = v_adc * this->batt_divider_;
+  float pct = (v_bat - this->batt_v_empty_) / (this->batt_v_full_ - this->batt_v_empty_) * 100.0f;
+  if (pct > 100.0f) pct = 100.0f;
+  if (pct < 0.0f) pct = 0.0f;
+
+  ESP_LOGD(TAG, "Battery: %.2fV %.0f%% (raw=%d adc=%.3fV %d/%d)",
+           v_bat, pct, avg, v_adc, ok, this->batt_samples_);
+
+  if (this->batt_voltage_sensor_) this->batt_voltage_sensor_->publish_state(v_bat);
+  if (this->batt_percent_sensor_) this->batt_percent_sensor_->publish_state(pct);
+}
+
+// ── Battery state queries ──────────────────────────────────────
+
+bool ShellyHTDisplay::is_battery_present() const {
+  if (this->batt_present_sensor_ && this->batt_present_sensor_->has_state())
+    return this->batt_present_sensor_->state;
+  return false;
+}
+
+bool ShellyHTDisplay::is_usb_powered() const { return !this->is_battery_present(); }
+
+int ShellyHTDisplay::get_battery_segments() const {
+  if (!this->batt_percent_sensor_ || !this->batt_percent_sensor_->has_state())
+    return 0;
+  float p = this->batt_percent_sensor_->state;
+  if (std::isnan(p)) return 0;
+  if (p >= 80) return 5;
+  if (p >= 60) return 4;
+  if (p >= 40) return 3;
+  if (p >= 20) return 2;
+  if (p > 0)   return 1;
+  return 0;
+}
+
+// ── RTC time tracking ──────────────────────────────────────────
 
 void ShellyHTDisplay::save_time_to_rtc_() {
   if (this->disp_hour_ < 0) return;
@@ -35,7 +198,7 @@ void ShellyHTDisplay::save_time_to_rtc_() {
   rtc_saved_temp = this->disp_temp_;
   rtc_saved_humi = this->disp_humi_;
   rtc_time_magic = RTC_TIME_MAGIC;
-  ESP_LOGD(TAG, "RTC save %02d:%02d %.1f°C %d%%",
+  ESP_LOGD(TAG, "RTC save %02d:%02d %.1fC %d%%",
            rtc_saved_hour, rtc_saved_min, rtc_saved_temp / 10.0f, rtc_saved_humi);
 }
 
@@ -45,7 +208,7 @@ bool ShellyHTDisplay::load_time_from_rtc_() {
   return true;
 }
 
-// ── 7-segment helpers ───────────────────────────────────────────
+// ── 7-segment helpers ──────────────────────────────────────────
 
 void ShellyHTDisplay::write_digit_(const DigitMap &d, uint8_t c) {
   this->display_->set_segment(d.a, (c>>6)&1);
@@ -84,7 +247,7 @@ uint8_t ShellyHTDisplay::char_to_seg7_(char c) {
   }
 }
 
-// ── Icon state helper ───────────────────────────────────────────
+// ── Icon state helper ──────────────────────────────────────────
 
 bool ShellyHTDisplay::get_icon_state_(binary_sensor::BinarySensor *ext, bool default_val) {
   if (ext != nullptr && ext->has_state())
@@ -92,7 +255,7 @@ bool ShellyHTDisplay::get_icon_state_(binary_sensor::BinarySensor *ext, bool def
   return default_val;
 }
 
-// ── High-level display API ──────────────────────────────────────
+// ── High-level display API ─────────────────────────────────────
 
 void ShellyHTDisplay::show_temperature(float t, bool f) {
   float v = f ? t * 9.0f / 5.0f + 32.0f : t;
@@ -138,11 +301,11 @@ void ShellyHTDisplay::show_text_clock(const char *t) {
     this->write_digit_(*d[i], this->char_to_seg7_((t && t[i]) ? t[i] : ' '));
 }
 
-// ── Icons ───────────────────────────────────────────────────────
+// ── Icons ──────────────────────────────────────────────────────
 
 void ShellyHTDisplay::show_battery(uint8_t l) {
   if (l > 5) l = 5;
-  this->display_->set_segment(SEG_BATT[4], true);  // Frame always on
+  this->display_->set_segment(SEG_BATT[4], true);  // frame always on
   for (int i = 0; i < 4; i++) this->display_->set_segment(SEG_BATT[i], l >= (i + 1));
 }
 
@@ -154,22 +317,20 @@ void ShellyHTDisplay::show_signal(uint8_t b) {
 void ShellyHTDisplay::show_bluetooth(bool on) { this->display_->set_segment(SEG_BT, on); }
 void ShellyHTDisplay::show_globe(bool on)     { this->display_->set_segment(SEG_GLOBE, on); }
 void ShellyHTDisplay::show_frost(bool on)     { this->display_->set_segment(SEG_FROST, on); }
-void ShellyHTDisplay::show_heating(bool on)   { this->display_->set_segment(SEG_HEIZ, on); }
+void ShellyHTDisplay::show_heating(bool on)   { this->display_->set_segment(SEG_HEATING, on); }
 void ShellyHTDisplay::show_ventilator(bool on){ this->display_->set_segment(SEG_VENT, on); }
-void ShellyHTDisplay::show_calendar(bool on)  { this->display_->set_segment(SEG_KALEN, on); }
-void ShellyHTDisplay::show_arrow(bool on)     { this->display_->set_segment(SEG_PFEIL, on); }
+void ShellyHTDisplay::show_calendar(bool on)  { this->display_->set_segment(SEG_CALENDAR, on); }
+void ShellyHTDisplay::show_arrow(bool on)     { this->display_->set_segment(SEG_ARROW, on); }
 void ShellyHTDisplay::show_dp(bool on)        { this->display_->set_segment(SEG_DP, on); }
-void ShellyHTDisplay::show_degree(bool on)    { this->display_->set_segment(SEG_GRAD, on); }
-void ShellyHTDisplay::show_percent(bool on)   { this->display_->set_segment(SEG_PROZENT, on); }
+void ShellyHTDisplay::show_degree(bool on)    { this->display_->set_segment(SEG_DEGREE, on); }
+void ShellyHTDisplay::show_percent(bool on)   { this->display_->set_segment(SEG_PERCENT, on); }
 void ShellyHTDisplay::show_unit(char u)       { this->write_digit_(DIG_UNIT, this->char_to_seg7_(u)); }
 
 void ShellyHTDisplay::show_colon(bool on) {
-  // Bit 38 = upper + lower dot (real colon)
-  // Bit 130 = middle dot (DO NOT use — creates unwanted 3rd dot)
   this->display_->set_segment(SEG_COL_TOP, on);
 }
 
-// ── OTA progress display ────────────────────────────────────────
+// ── OTA progress display ───────────────────────────────────────
 
 void ShellyHTDisplay::show_ota_begin() {
   this->ota_active_ = true;
@@ -213,7 +374,7 @@ void ShellyHTDisplay::show_ota_error() {
   this->force_refresh();
 }
 
-// ── Internal state machine ──────────────────────────────────────
+// ── Internal state machine ─────────────────────────────────────
 
 void ShellyHTDisplay::check_and_update_() {
   if (this->ota_active_) return;
@@ -226,18 +387,16 @@ void ShellyHTDisplay::check_and_update_() {
   float raw_temp;
 
   if (has_t && has_h) {
-    // Fresh sensor data available
     new_temp = (int)roundf(this->temp_sensor_->state * 10.0f);
     new_humi = (int)this->humi_sensor_->state;
     raw_temp = this->temp_sensor_->state;
   } else if (this->wifi_skipped_ && rtc_time_magic == RTC_TIME_MAGIC) {
-    // Non-WiFi wake: sensor hasn't read yet, use RTC fallback
     new_temp = rtc_saved_temp;
     new_humi = rtc_saved_humi;
     raw_temp = rtc_saved_temp / 10.0f;
-    ESP_LOGD(TAG, "Sensor not ready, using RTC: %.1f°C %d%%", raw_temp, new_humi);
+    ESP_LOGD(TAG, "Sensor not ready, using RTC: %.1fC %d%%", raw_temp, new_humi);
   } else {
-    return;  // No data available
+    return;
   }
 
   // Time: use RTC time if WiFi was skipped, otherwise HA time
@@ -292,7 +451,7 @@ void ShellyHTDisplay::check_and_update_() {
 
   if (!changed) return;
 
-  ESP_LOGD(TAG, "Update: %.1f°C %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
+  ESP_LOGD(TAG, "Update: %.1fC %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
            new_temp / 10.0f, new_humi, new_hour, new_min, new_bars,
            new_wifi, new_frost, this->wifi_skipped_ ? " [no-wifi]" : "");
 
@@ -324,7 +483,13 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_calendar(new_calendar);
   this->show_arrow(new_arrow);
 
-  // Fire on_update trigger (battery icon, icon overrides, etc.)
+  // Battery: auto-show from sensor if available
+  if (this->batt_percent_sensor_ && this->batt_percent_sensor_->has_state() &&
+      !std::isnan(this->batt_percent_sensor_->state)) {
+    this->show_battery(this->get_battery_segments());
+  }
+
+  // Fire on_update trigger (icon overrides, etc.)
   this->on_update_trigger_.trigger();
 
   // Commit
@@ -337,9 +502,12 @@ void ShellyHTDisplay::check_and_update_() {
   }
 }
 
-// ── Lifecycle ───────────────────────────────────────────────────
+// ── Lifecycle ──────────────────────────────────────────────────
 
 void ShellyHTDisplay::setup() {
+  // Initialize battery hardware
+  this->setup_battery_();
+
   // Deep sleep WiFi optimization
   if (this->deep_sleep_mode_ && this->wifi_update_every_ > 0) {
     if (this->load_time_from_rtc_()) {
@@ -374,22 +542,22 @@ void ShellyHTDisplay::setup() {
 }
 
 void ShellyHTDisplay::update() {
+  this->read_battery_();
   this->check_and_update_();
 }
 
 void ShellyHTDisplay::dump_config() {
   ESP_LOGCONFIG(TAG,
-                "Shelly H&T Gen3 Display:\n"
+                "Shelly H&T Gen3:\n"
                 "  Mode: %s\n"
                 "  Font: %s\n"
                 "  Update interval: %ums\n"
-                "  Sensors: temp=%s humi=%s batt=%s wifi=%s time=%s",
+                "  Sensors: temp=%s humi=%s wifi=%s time=%s",
                 this->deep_sleep_mode_ ? "deep-sleep" : "always-on",
                 this->font_ == FONT_SIEKOO ? "siekoo" : "classic",
                 this->get_update_interval(),
                 this->temp_sensor_ ? "yes" : "no",
                 this->humi_sensor_ ? "yes" : "no",
-                this->batt_sensor_ ? "yes" : "no",
                 this->wifi_sensor_ ? "yes" : "no",
                 this->time_ ? "yes" : "no");
   if (this->deep_sleep_mode_) {
@@ -399,6 +567,18 @@ void ShellyHTDisplay::dump_config() {
                   this->wifi_update_every_,
                   this->sleep_duration_ms_ / 1000);
   }
+  ESP_LOGCONFIG(TAG,
+                "  Battery: adc=GPIO%d presence=GPIO%d power_en=GPIO%d\n"
+                "           divider=%.3f range=%.1f-%.1fV samples=%d %s",
+                this->batt_adc_pin_, this->batt_presence_pin_, this->batt_power_en_pin_,
+                this->batt_divider_, this->batt_v_empty_, this->batt_v_full_,
+                this->batt_samples_, this->batt_available_ ? "OK" : "FAILED");
+  ESP_LOGCONFIG(TAG,
+                "  Battery outputs: voltage=%s percent=%s present=%s ext_power=%s",
+                this->batt_voltage_sensor_ ? "yes" : "no",
+                this->batt_percent_sensor_ ? "yes" : "no",
+                this->batt_present_sensor_ ? "yes" : "no",
+                this->ext_power_sensor_ ? "yes" : "no");
   ESP_LOGCONFIG(TAG,
                 "  Icons: frost=%s heat=%s vent=%s bt=%s globe=%s cal=%s arrow=%s",
                 this->frost_sensor_ ? "ext" : "def",
@@ -410,5 +590,5 @@ void ShellyHTDisplay::dump_config() {
                 this->arrow_sensor_ ? "ext" : "def");
 }
 
-}  // namespace uc8119
+}  // namespace shelly_htg3
 }  // namespace esphome
