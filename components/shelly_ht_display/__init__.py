@@ -1,6 +1,12 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor, binary_sensor, time as time_comp
+from esphome.components import (
+    sensor,
+    binary_sensor,
+    output,
+    time as time_comp,
+    voltage_sampler,
+)
 from esphome.const import (
     CONF_ID,
     CONF_TIME_ID,
@@ -14,6 +20,7 @@ from esphome.core import CORE
 from esphome import automation
 
 DEPENDENCIES = ["uc8119"]
+AUTO_LOAD = ["voltage_sampler"]
 CODEOWNERS = ["@alex"]
 
 uc8119_ns = cg.esphome_ns.namespace("uc8119")
@@ -49,22 +56,18 @@ CONF_GLOBE_SENSOR = "globe_sensor"
 CONF_CALENDAR_SENSOR = "calendar_sensor"
 CONF_ARROW_SENSOR = "arrow_sensor"
 
-# Battery hardware config
-CONF_BATTERY_ADC_PIN = "battery_adc_pin"
-CONF_BATTERY_PRESENCE_PIN = "battery_presence_pin"
-CONF_BATTERY_POWER_ENABLE_PIN = "battery_power_enable_pin"
+# Battery hardware — all external ESPHome component references
+CONF_BATTERY_ADC_SENSOR = "battery_adc_sensor"
+CONF_BATTERY_PRESENCE_SENSOR = "battery_presence_sensor"
+CONF_BATTERY_POWER_ENABLE = "battery_power_enable"
 CONF_BATTERY_DIVIDER = "battery_divider"
 CONF_BATTERY_FULL_VOLTAGE = "battery_full_voltage"
 CONF_BATTERY_EMPTY_VOLTAGE = "battery_empty_voltage"
-CONF_BATTERY_SAMPLES = "battery_samples"
 
-# Battery output sensors
+# Battery output sensors (published by this component)
 CONF_BATTERY_VOLTAGE = "battery_voltage"
 CONF_BATTERY_PERCENT = "battery_percent"
-CONF_BATTERY_PRESENT = "battery_present"
 CONF_EXTERNAL_POWER = "external_power"
-
-GPIO_PIN_SCHEMA = cv.int_range(min=0, max=21)
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -96,16 +99,22 @@ CONFIG_SCHEMA = (
                 binary_sensor.BinarySensor
             ),
             cv.Optional(CONF_ARROW_SENSOR): cv.use_id(binary_sensor.BinarySensor),
-            # ── Battery hardware config ──────────────────────────────
-            cv.Optional(CONF_BATTERY_ADC_PIN, default=4): GPIO_PIN_SCHEMA,
-            cv.Optional(CONF_BATTERY_PRESENCE_PIN, default=5): GPIO_PIN_SCHEMA,
-            cv.Optional(CONF_BATTERY_POWER_ENABLE_PIN, default=18): GPIO_PIN_SCHEMA,
+            # ── Battery hardware (all optional references) ───────────
+            #  battery_adc_sensor:       platform: adc sensor
+            #  battery_presence_sensor:  platform: gpio binary_sensor
+            #  battery_power_enable:     platform: gpio output
+            cv.Optional(CONF_BATTERY_ADC_SENSOR): cv.use_id(
+                voltage_sampler.VoltageSampler
+            ),
+            cv.Optional(CONF_BATTERY_PRESENCE_SENSOR): cv.use_id(
+                binary_sensor.BinarySensor
+            ),
+            cv.Optional(CONF_BATTERY_POWER_ENABLE): cv.use_id(
+                output.BinaryOutput
+            ),
             cv.Optional(CONF_BATTERY_DIVIDER, default=2.263): cv.float_,
             cv.Optional(CONF_BATTERY_FULL_VOLTAGE, default=6.0): cv.float_,
             cv.Optional(CONF_BATTERY_EMPTY_VOLTAGE, default=4.0): cv.float_,
-            cv.Optional(CONF_BATTERY_SAMPLES, default=15): cv.int_range(
-                min=1, max=64
-            ),
             # ── Battery output sensors ───────────────────────────────
             cv.Optional(CONF_BATTERY_VOLTAGE): sensor.sensor_schema(
                 unit_of_measurement=UNIT_VOLT,
@@ -118,9 +127,6 @@ CONFIG_SCHEMA = (
                 accuracy_decimals=0,
                 device_class=DEVICE_CLASS_BATTERY,
                 state_class=STATE_CLASS_MEASUREMENT,
-            ),
-            cv.Optional(CONF_BATTERY_PRESENT): binary_sensor.binary_sensor_schema(
-                device_class="battery",
             ),
             cv.Optional(CONF_EXTERNAL_POWER): binary_sensor.binary_sensor_schema(
                 device_class="plug",
@@ -177,14 +183,22 @@ async def to_code(config):
             s = await cg.get_variable(config[conf_key])
             cg.add(getattr(var, setter)(s))
 
-    # ── Battery hardware config ──────────────────────────────────
-    cg.add(var.set_battery_adc_pin(config[CONF_BATTERY_ADC_PIN]))
-    cg.add(var.set_battery_presence_pin(config[CONF_BATTERY_PRESENCE_PIN]))
-    cg.add(var.set_battery_power_enable_pin(config[CONF_BATTERY_POWER_ENABLE_PIN]))
+    # ── Battery hardware references ──────────────────────────────
+    if CONF_BATTERY_ADC_SENSOR in config:
+        s = await cg.get_variable(config[CONF_BATTERY_ADC_SENSOR])
+        cg.add(var.set_battery_adc(s))
+
+    if CONF_BATTERY_PRESENCE_SENSOR in config:
+        s = await cg.get_variable(config[CONF_BATTERY_PRESENCE_SENSOR])
+        cg.add(var.set_battery_presence(s))
+
+    if CONF_BATTERY_POWER_ENABLE in config:
+        s = await cg.get_variable(config[CONF_BATTERY_POWER_ENABLE])
+        cg.add(var.set_battery_power_enable(s))
+
     cg.add(var.set_battery_divider(config[CONF_BATTERY_DIVIDER]))
     cg.add(var.set_battery_full_voltage(config[CONF_BATTERY_FULL_VOLTAGE]))
     cg.add(var.set_battery_empty_voltage(config[CONF_BATTERY_EMPTY_VOLTAGE]))
-    cg.add(var.set_battery_samples(config[CONF_BATTERY_SAMPLES]))
 
     # ── Battery output sensors ───────────────────────────────────
     if CONF_BATTERY_VOLTAGE in config:
@@ -194,10 +208,6 @@ async def to_code(config):
     if CONF_BATTERY_PERCENT in config:
         s = await sensor.new_sensor(config[CONF_BATTERY_PERCENT])
         cg.add(var.set_battery_percent_sensor(s))
-
-    if CONF_BATTERY_PRESENT in config:
-        s = await binary_sensor.new_binary_sensor(config[CONF_BATTERY_PRESENT])
-        cg.add(var.set_battery_present_sensor(s))
 
     if CONF_EXTERNAL_POWER in config:
         s = await binary_sensor.new_binary_sensor(config[CONF_EXTERNAL_POWER])

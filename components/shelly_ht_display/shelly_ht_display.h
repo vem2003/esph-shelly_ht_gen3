@@ -3,21 +3,25 @@
 // SPDX-License-Identifier: MIT
 //
 // Unified component: segment display (UC8119), 7-segment encoding,
-// sensor state machine, and battery monitoring via ADC.
+// sensor state machine, and battery monitoring.
 //
-// Battery hardware (verified, configurable via YAML):
-//   GPIO4  = Battery ADC (ADC1_CH4)          default
-//   GPIO5  = Battery Presence Detect          default
-//   GPIO18 = Power Enable for voltage divider default
-//   Divider = 2.263  (calibrated against multimeter)
-//   Range: 4.0V (0%) - 6.0V (100%), 4xAA batteries
+// Battery hardware is referenced via standard ESPHome components:
+//   battery_adc_sensor:       platform: adc sensor (VoltageSampler)
+//   battery_presence_sensor:  platform: gpio binary_sensor
+//   battery_power_enable:     platform: gpio output
+//
+// Defaults (verified on Shelly H&T Gen3, S3SN-0U12A):
+//   ADC: GPIO4, Presence: GPIO5, Power Enable: GPIO18
+//   Divider: 2.263, Range: 4.0V-6.0V (4xAA)
 
 #include "esphome/core/component.h"
 #include "esphome/core/automation.h"
 #include "esphome/core/hal.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/output/binary_output.h"
 #include "esphome/components/time/real_time_clock.h"
+#include "esphome/components/voltage_sampler/voltage_sampler.h"
 #include "../uc8119/uc8119.h"
 #include "siekoo.h"
 
@@ -86,19 +90,17 @@ class ShellyHTDisplay : public PollingComponent {
   void set_calendar_sensor(binary_sensor::BinarySensor *s) { this->calendar_sensor_ = s; }
   void set_arrow_sensor(binary_sensor::BinarySensor *s) { this->arrow_sensor_ = s; }
 
-  // ── Battery hardware config (GPIO pins, divider, thresholds) ──
-  void set_battery_adc_pin(int pin) { this->batt_adc_pin_ = pin; }
-  void set_battery_presence_pin(int pin) { this->batt_presence_pin_ = pin; }
-  void set_battery_power_enable_pin(int pin) { this->batt_power_en_pin_ = pin; }
+  // ── Battery hardware references ───────────────────────────────
+  void set_battery_adc(voltage_sampler::VoltageSampler *s) { this->batt_adc_ = s; }
+  void set_battery_presence(binary_sensor::BinarySensor *s) { this->batt_presence_ = s; }
+  void set_battery_power_enable(output::BinaryOutput *o) { this->batt_power_en_ = o; }
   void set_battery_divider(float d) { this->batt_divider_ = d; }
   void set_battery_full_voltage(float v) { this->batt_v_full_ = v; }
   void set_battery_empty_voltage(float v) { this->batt_v_empty_ = v; }
-  void set_battery_samples(int n) { this->batt_samples_ = n; }
 
   // ── Battery output sensors ────────────────────────────────────
   void set_battery_voltage_sensor(sensor::Sensor *s) { this->batt_voltage_sensor_ = s; }
   void set_battery_percent_sensor(sensor::Sensor *s) { this->batt_percent_sensor_ = s; }
-  void set_battery_present_sensor(binary_sensor::BinarySensor *s) { this->batt_present_sensor_ = s; }
   void set_external_power_sensor(binary_sensor::BinarySensor *s) { this->ext_power_sensor_ = s; }
 
   // ── Triggers ──────────────────────────────────────────────────
@@ -172,25 +174,18 @@ class ShellyHTDisplay : public PollingComponent {
   binary_sensor::BinarySensor *calendar_sensor_{nullptr};
   binary_sensor::BinarySensor *arrow_sensor_{nullptr};
 
-  // ── Battery config ────────────────────────────────────────────
-  int batt_adc_pin_{4};
-  int batt_presence_pin_{5};
-  int batt_power_en_pin_{18};
+  // ── Battery hardware references ───────────────────────────────
+  voltage_sampler::VoltageSampler *batt_adc_{nullptr};
+  binary_sensor::BinarySensor *batt_presence_{nullptr};
+  output::BinaryOutput *batt_power_en_{nullptr};
   float batt_divider_{2.263f};
   float batt_v_full_{6.0f};
   float batt_v_empty_{4.0f};
-  int batt_samples_{15};
 
   // Battery output sensors
   sensor::Sensor *batt_voltage_sensor_{nullptr};
   sensor::Sensor *batt_percent_sensor_{nullptr};
-  binary_sensor::BinarySensor *batt_present_sensor_{nullptr};
   binary_sensor::BinarySensor *ext_power_sensor_{nullptr};
-
-  // Battery ADC handles (opaque, cast in .cpp)
-  void *adc_handle_{nullptr};
-  void *cali_handle_{nullptr};
-  bool batt_available_{false};
 
   // Triggers
   Trigger<> on_update_trigger_;
@@ -218,7 +213,6 @@ class ShellyHTDisplay : public PollingComponent {
   bool get_icon_state_(binary_sensor::BinarySensor *ext, bool default_val);
 
   // Battery internals
-  void setup_battery_();
   void read_battery_();
 
   // RTC time tracking

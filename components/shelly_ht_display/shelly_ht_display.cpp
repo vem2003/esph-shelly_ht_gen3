@@ -1,22 +1,6 @@
 #include "shelly_ht_display.h"
 #include "esphome/core/log.h"
 #include "esphome/components/wifi/wifi_component.h"
-
-#include "driver/gpio.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-#if __has_include("esp_adc/adc_oneshot.h")
-  #include "esp_adc/adc_oneshot.h"
-  #include "esp_adc/adc_cali.h"
-  #include "esp_adc/adc_cali_scheme.h"
-  #define HTG3_ADC_V5
-#else
-  #include "driver/adc.h"
-  #include "esp_adc_cal.h"
-  #define HTG3_ADC_V4
-#endif
-
 #include <cmath>
 
 // RTC memory for time tracking across deep sleep cycles
@@ -42,156 +26,45 @@ namespace shelly_htg3 {
 
 static const char *const TAG = "shelly_ht";
 
-// ── Battery setup ──────────────────────────────────────────────
-
-void ShellyHTDisplay::setup_battery_() {
-  // Power enable pin: output, initial LOW
-  gpio_config_t pwr = {};
-  pwr.pin_bit_mask = (1ULL << this->batt_power_en_pin_);
-  pwr.mode = GPIO_MODE_OUTPUT;
-  pwr.pull_up_en = GPIO_PULLUP_DISABLE;
-  pwr.pull_down_en = GPIO_PULLDOWN_DISABLE;
-  pwr.intr_type = GPIO_INTR_DISABLE;
-  gpio_config(&pwr);
-  gpio_set_level((gpio_num_t) this->batt_power_en_pin_, 0);
-
-  // Presence pin: input
-  gpio_config_t bp = {};
-  bp.pin_bit_mask = (1ULL << this->batt_presence_pin_);
-  bp.mode = GPIO_MODE_INPUT;
-  bp.pull_up_en = GPIO_PULLUP_DISABLE;
-  bp.pull_down_en = GPIO_PULLDOWN_DISABLE;
-  bp.intr_type = GPIO_INTR_DISABLE;
-  gpio_config(&bp);
-
-  // ADC init (ESP-IDF version dependent)
-#ifdef HTG3_ADC_V5
-  adc_oneshot_unit_init_cfg_t ucfg = {};
-  ucfg.unit_id = ADC_UNIT_1;
-  ucfg.ulp_mode = ADC_ULP_MODE_DISABLE;
-
-  adc_oneshot_unit_handle_t adc = nullptr;
-  if (adc_oneshot_new_unit(&ucfg, &adc) != ESP_OK) {
-    ESP_LOGE(TAG, "Battery ADC unit init failed");
-    return;
-  }
-  this->adc_handle_ = adc;
-
-  adc_oneshot_chan_cfg_t ccfg = {};
-  ccfg.atten = ADC_ATTEN_DB_12;
-  ccfg.bitwidth = ADC_BITWIDTH_12;
-  if (adc_oneshot_config_channel(adc, (adc_channel_t) this->batt_adc_pin_, &ccfg) != ESP_OK) {
-    ESP_LOGE(TAG, "Battery ADC channel config failed (GPIO%d)", this->batt_adc_pin_);
-    return;
-  }
-
-  adc_cali_curve_fitting_config_t cal = {};
-  cal.unit_id = ADC_UNIT_1;
-  cal.chan = (adc_channel_t) this->batt_adc_pin_;
-  cal.atten = ADC_ATTEN_DB_12;
-  cal.bitwidth = ADC_BITWIDTH_12;
-
-  adc_cali_handle_t cali = nullptr;
-  if (adc_cali_create_scheme_curve_fitting(&cal, &cali) == ESP_OK) {
-    this->cali_handle_ = cali;
-  } else {
-    ESP_LOGW(TAG, "Battery ADC calibration unavailable");
-  }
-
-#else  // HTG3_ADC_V4 (ESP-IDF < 5.0)
-  adc1_config_width(ADC_WIDTH_BIT_12);
-  adc1_config_channel_atten((adc1_channel_t) this->batt_adc_pin_, ADC_ATTEN_DB_12);
-
-  auto *chars = new esp_adc_cal_characteristics_t;
-  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_12, ADC_WIDTH_BIT_12, 0, chars);
-  this->cali_handle_ = chars;
-  this->adc_handle_ = (void *) 1;  // non-null = initialized
-#endif
-
-  this->batt_available_ = true;
-  ESP_LOGI(TAG, "Battery: ADC=GPIO%d presence=GPIO%d power_en=GPIO%d div=%.3f range=%.1f-%.1fV",
-           this->batt_adc_pin_, this->batt_presence_pin_, this->batt_power_en_pin_,
-           this->batt_divider_, this->batt_v_empty_, this->batt_v_full_);
-}
-
 // ── Battery read cycle ─────────────────────────────────────────
 
 void ShellyHTDisplay::read_battery_() {
-  if (!this->batt_available_) return;
-
-  // Presence check
-  bool present = gpio_get_level((gpio_num_t) this->batt_presence_pin_) == 1;
-  if (this->batt_present_sensor_) this->batt_present_sensor_->publish_state(present);
+  // Check presence via external binary_sensor
+  bool present = false;
+  if (this->batt_presence_ && this->batt_presence_->has_state()) {
+    present = this->batt_presence_->state;
+  }
   if (this->ext_power_sensor_) this->ext_power_sensor_->publish_state(!present);
 
-  if (!present) {
-    ESP_LOGD(TAG, "Battery: USB mode, skipping ADC");
+  if (!present || !this->batt_adc_ || !this->batt_power_en_) {
+    if (!present) ESP_LOGD(TAG, "Battery: USB mode, skipping ADC");
     if (this->batt_voltage_sensor_) this->batt_voltage_sensor_->publish_state(NAN);
     if (this->batt_percent_sensor_) this->batt_percent_sensor_->publish_state(NAN);
     return;
   }
 
-  if (!this->adc_handle_) return;
+  // 1) Power enable ON via external output
+  this->batt_power_en_->turn_on();
+  delay(10);  // settle time
 
-  // 1) Power enable HIGH
-  gpio_set_level((gpio_num_t) this->batt_power_en_pin_, 1);
-  vTaskDelay(pdMS_TO_TICKS(10));
+  // 2) Sample voltage via VoltageSampler
+  float v_adc = this->batt_adc_->sample();
 
-  // 2) Multi-sample
-  int32_t sum = 0;
-  int ok = 0;
-  for (int i = 0; i < this->batt_samples_; i++) {
-    int raw = -1;
-#ifdef HTG3_ADC_V5
-    auto adc = (adc_oneshot_unit_handle_t) this->adc_handle_;
-    if (adc_oneshot_read(adc, (adc_channel_t) this->batt_adc_pin_, &raw) == ESP_OK) {
-      sum += raw; ok++;
-    }
-#else
-    raw = adc1_get_raw((adc1_channel_t) this->batt_adc_pin_);
-    if (raw >= 0) { sum += raw; ok++; }
-#endif
-  }
+  // 3) Power enable OFF
+  this->batt_power_en_->turn_off();
 
-  // 3) Power enable LOW
-  gpio_set_level((gpio_num_t) this->batt_power_en_pin_, 0);
-
-  if (ok == 0) {
-    ESP_LOGW(TAG, "Battery: ADC read failed (0/%d samples)", this->batt_samples_);
+  if (std::isnan(v_adc)) {
+    ESP_LOGW(TAG, "Battery: ADC read failed");
     return;
   }
 
-  int avg = sum / ok;
-
-  // 4) Calibrated voltage
-  float v_adc;
-#ifdef HTG3_ADC_V5
-  auto cali = (adc_cali_handle_t) this->cali_handle_;
-  if (cali) {
-    int mv;
-    adc_cali_raw_to_voltage(cali, avg, &mv);
-    v_adc = mv / 1000.0f;
-  } else {
-    v_adc = avg / 4095.0f * 3.1f;
-  }
-#else
-  auto *chars = (esp_adc_cal_characteristics_t *) this->cali_handle_;
-  if (chars) {
-    uint32_t mv = esp_adc_cal_raw_to_voltage(avg, chars);
-    v_adc = mv / 1000.0f;
-  } else {
-    v_adc = avg / 4095.0f * 3.1f;
-  }
-#endif
-
-  // 5) Battery voltage + percentage
+  // 4) Apply divider and calculate percentage
   float v_bat = v_adc * this->batt_divider_;
   float pct = (v_bat - this->batt_v_empty_) / (this->batt_v_full_ - this->batt_v_empty_) * 100.0f;
   if (pct > 100.0f) pct = 100.0f;
   if (pct < 0.0f) pct = 0.0f;
 
-  ESP_LOGD(TAG, "Battery: %.2fV %.0f%% (raw=%d adc=%.3fV %d/%d)",
-           v_bat, pct, avg, v_adc, ok, this->batt_samples_);
+  ESP_LOGD(TAG, "Battery: %.2fV %.0f%% (adc=%.3fV)", v_bat, pct, v_adc);
 
   if (this->batt_voltage_sensor_) this->batt_voltage_sensor_->publish_state(v_bat);
   if (this->batt_percent_sensor_) this->batt_percent_sensor_->publish_state(pct);
@@ -200,8 +73,8 @@ void ShellyHTDisplay::read_battery_() {
 // ── Battery state queries ──────────────────────────────────────
 
 bool ShellyHTDisplay::is_battery_present() const {
-  if (this->batt_present_sensor_ && this->batt_present_sensor_->has_state())
-    return this->batt_present_sensor_->state;
+  if (this->batt_presence_ && this->batt_presence_->has_state())
+    return this->batt_presence_->state;
   return false;
 }
 
@@ -514,7 +387,7 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_calendar(new_calendar);
   this->show_arrow(new_arrow);
 
-  // Battery: auto-show from sensor if available
+  // Battery: auto-show from percent sensor if available
   if (this->batt_percent_sensor_ && this->batt_percent_sensor_->has_state() &&
       !std::isnan(this->batt_percent_sensor_->state)) {
     this->show_battery(this->get_battery_segments());
@@ -536,9 +409,6 @@ void ShellyHTDisplay::check_and_update_() {
 // ── Lifecycle ──────────────────────────────────────────────────
 
 void ShellyHTDisplay::setup() {
-  // Initialize battery hardware
-  this->setup_battery_();
-
   // Deep sleep WiFi optimization
   if (this->deep_sleep_mode_ && this->wifi_update_every_ > 0) {
     if (this->load_time_from_rtc_()) {
@@ -568,8 +438,9 @@ void ShellyHTDisplay::setup() {
     }
   }
 
-  ESP_LOGI(TAG, "Ready (%s)",
-           this->deep_sleep_mode_ ? "deep-sleep" : "always-on");
+  ESP_LOGI(TAG, "Ready (%s, battery=%s)",
+           this->deep_sleep_mode_ ? "deep-sleep" : "always-on",
+           this->batt_adc_ ? "yes" : "no");
 }
 
 void ShellyHTDisplay::update() {
@@ -599,16 +470,16 @@ void ShellyHTDisplay::dump_config() {
                   this->sleep_duration_ms_ / 1000);
   }
   ESP_LOGCONFIG(TAG,
-                "  Battery: adc=GPIO%d presence=GPIO%d power_en=GPIO%d\n"
-                "           divider=%.3f range=%.1f-%.1fV samples=%d %s",
-                this->batt_adc_pin_, this->batt_presence_pin_, this->batt_power_en_pin_,
-                this->batt_divider_, this->batt_v_empty_, this->batt_v_full_,
-                this->batt_samples_, this->batt_available_ ? "OK" : "FAILED");
+                "  Battery: adc=%s presence=%s power_en=%s\n"
+                "           divider=%.3f range=%.1f-%.1fV",
+                this->batt_adc_ ? "yes" : "no",
+                this->batt_presence_ ? "yes" : "no",
+                this->batt_power_en_ ? "yes" : "no",
+                this->batt_divider_, this->batt_v_empty_, this->batt_v_full_);
   ESP_LOGCONFIG(TAG,
-                "  Battery outputs: voltage=%s percent=%s present=%s ext_power=%s",
+                "  Battery outputs: voltage=%s percent=%s ext_power=%s",
                 this->batt_voltage_sensor_ ? "yes" : "no",
                 this->batt_percent_sensor_ ? "yes" : "no",
-                this->batt_present_sensor_ ? "yes" : "no",
                 this->ext_power_sensor_ ? "yes" : "no");
   ESP_LOGCONFIG(TAG,
                 "  Icons: frost=%s heat=%s vent=%s bt=%s globe=%s cal=%s arrow=%s",
