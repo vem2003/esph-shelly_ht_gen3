@@ -407,6 +407,13 @@ void ShellyHTDisplay::check_and_update_() {
 // ── Lifecycle ──────────────────────────────────────────────────
 
 void ShellyHTDisplay::setup() {
+  // Runtime USB detection: deep_sleep configured but no battery → always-on
+  if (this->deep_sleep_mode_ && this->batt_presence_ &&
+      this->batt_presence_->has_state() && !this->batt_presence_->state) {
+    this->deep_sleep_mode_ = false;
+    ESP_LOGI(TAG, "USB powered (no battery), switching to always-on mode");
+  }
+
   // Deep sleep WiFi optimization
   if (this->deep_sleep_mode_ && this->wifi_update_every_ > 0) {
     if (this->load_time_from_rtc_()) {
@@ -437,9 +444,9 @@ void ShellyHTDisplay::setup() {
     }
   }
 
-  ESP_LOGI(TAG, "Ready (%s, battery=%s)",
+  ESP_LOGI(TAG, "Ready (%s, power=%s)",
            this->deep_sleep_mode_ ? "deep-sleep" : "always-on",
-           this->batt_adc_ ? "yes" : "no");
+           this->is_battery_present() ? "battery" : "USB");
 }
 
 void ShellyHTDisplay::update() {
