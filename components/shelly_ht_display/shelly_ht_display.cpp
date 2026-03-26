@@ -4,6 +4,9 @@
 #include "../uc8119/uc8119.h"
 #include <cmath>
 #include <sys/time.h>
+#ifdef USE_ESP32
+#include <esp_sleep.h>
+#endif
 
 // RTC memory for sensor cache across deep sleep cycles
 // Note: The ESP32 system clock (gettimeofday) persists across deep sleep
@@ -403,14 +406,34 @@ void ShellyHTDisplay::check_and_update_() {
 // ── Lifecycle ──────────────────────────────────────────────────
 
 void ShellyHTDisplay::setup() {
-  // Runtime USB detection: deep_sleep configured but no battery → always-on
+  // ── Wake source detection ───────────────────────────────────────
+  // Priority: USB > GPIO > Timer
+  //   USB:   always-on mode (no sleep, no WiFi skip)
+  //   GPIO:  force WiFi cycle (user pressed button → wants OTA/HA)
+  //   Timer: normal WiFi skip scheme
+
+  // 1. USB detection: no battery → always-on
   if (this->deep_sleep_mode_ && this->batt_presence_ &&
       this->batt_presence_->has_state() && !this->batt_presence_->state) {
     this->deep_sleep_mode_ = false;
     ESP_LOGI(TAG, "USB powered (no battery), switching to always-on mode");
   }
 
-  // Deep sleep WiFi optimization
+  // 2. GPIO wake detection (button press)
+  bool gpio_wake = false;
+#ifdef USE_ESP32
+  if (this->deep_sleep_mode_) {
+    auto cause = esp_sleep_get_wakeup_cause();
+    gpio_wake = (cause == ESP_SLEEP_WAKEUP_GPIO ||
+                 cause == ESP_SLEEP_WAKEUP_EXT0 ||
+                 cause == ESP_SLEEP_WAKEUP_EXT1);
+    if (gpio_wake) {
+      ESP_LOGI(TAG, "GPIO wake (button), forcing WiFi cycle");
+    }
+  }
+#endif
+
+  // 3. Deep sleep WiFi optimization
   // The ESP32 system clock persists across deep sleep — after one SNTP sync,
   // gettimeofday() returns the correct time on every subsequent wake.
   if (this->deep_sleep_mode_ && this->wifi_update_every_ > 0) {
@@ -421,7 +444,7 @@ void ShellyHTDisplay::setup() {
     if (clock_valid && has_state) {
       // Warm boot: system clock running, sensor data cached
       rtc_wake_count++;
-      bool wifi_cycle = (rtc_wake_count % this->wifi_update_every_) == 0;
+      bool wifi_cycle = gpio_wake || (rtc_wake_count % this->wifi_update_every_) == 0;
 
       if (!wifi_cycle) {
         wifi::global_wifi_component->disable();
@@ -429,8 +452,9 @@ void ShellyHTDisplay::setup() {
         ESP_LOGI(TAG, "No-WiFi wake %u/%u, clock %02d:%02d",
                  rtc_wake_count, this->wifi_update_every_, h, m);
       } else {
-        ESP_LOGI(TAG, "WiFi wake %u/%u (SNTP re-sync)",
-                 rtc_wake_count, this->wifi_update_every_);
+        ESP_LOGI(TAG, "WiFi wake %u/%u%s",
+                 rtc_wake_count, this->wifi_update_every_,
+                 gpio_wake ? " (button)" : " (SNTP re-sync)");
       }
     } else {
       rtc_wake_count = 0;
