@@ -3,22 +3,23 @@
 #include "esphome/components/wifi/wifi_component.h"
 #include "../uc8119/uc8119.h"
 #include <cmath>
+#include <sys/time.h>
 
-// RTC memory for time tracking across deep sleep cycles
+// RTC memory for sensor cache across deep sleep cycles
+// Note: The ESP32 system clock (gettimeofday) persists across deep sleep
+// automatically — no manual time tracking needed.
 #ifdef USE_ESP32
-static RTC_DATA_ATTR uint32_t rtc_time_magic;
-static RTC_DATA_ATTR int32_t  rtc_saved_total_sec;  // seconds since midnight
+static RTC_DATA_ATTR uint32_t rtc_state_magic;
 static RTC_DATA_ATTR uint32_t rtc_wake_count;
 static RTC_DATA_ATTR int16_t  rtc_saved_temp;   // temp * 10 (e.g. 235 = 23.5C)
 static RTC_DATA_ATTR int16_t  rtc_saved_humi;   // humidity (e.g. 67)
 #else
-static uint32_t rtc_time_magic;
-static int32_t  rtc_saved_total_sec;
+static uint32_t rtc_state_magic;
 static uint32_t rtc_wake_count;
 static int16_t  rtc_saved_temp;
 static int16_t  rtc_saved_humi;
 #endif
-static const uint32_t RTC_TIME_MAGIC = 0x54494D45;  // "TIME"
+static const uint32_t RTC_STATE_MAGIC = 0x53544154;  // "STAT"
 
 namespace esphome {
 namespace shelly_htg3 {
@@ -91,22 +92,29 @@ int ShellyHTDisplay::get_battery_segments() const {
 
 // ── RTC time tracking ──────────────────────────────────────────
 
-void ShellyHTDisplay::save_time_to_rtc_() {
-  if (this->disp_hour_ < 0) return;
-  rtc_saved_total_sec = this->disp_hour_ * 3600 + this->disp_min_ * 60;
+void ShellyHTDisplay::save_state_to_rtc_() {
   rtc_saved_temp = this->disp_temp_;
   rtc_saved_humi = this->disp_humi_;
-  rtc_time_magic = RTC_TIME_MAGIC;
-  ESP_LOGD(TAG, "RTC save %02d:%02d (%ds) %.1fC %d%%",
-           this->disp_hour_, this->disp_min_, rtc_saved_total_sec,
-           rtc_saved_temp / 10.0f, rtc_saved_humi);
+  rtc_state_magic = RTC_STATE_MAGIC;
+  ESP_LOGD(TAG, "RTC save: %.1fC %d%%", rtc_saved_temp / 10.0f, rtc_saved_humi);
 }
 
-bool ShellyHTDisplay::load_time_from_rtc_() {
-  if (rtc_time_magic != RTC_TIME_MAGIC) return false;
-  int h = (rtc_saved_total_sec / 3600) % 24;
-  int m = (rtc_saved_total_sec % 3600) / 60;
-  ESP_LOGD(TAG, "RTC load %02d:%02d (%ds) cycle %u", h, m, rtc_saved_total_sec, rtc_wake_count);
+bool ShellyHTDisplay::has_cached_state_() {
+  if (rtc_state_magic != RTC_STATE_MAGIC) return false;
+  ESP_LOGD(TAG, "RTC load: %.1fC %d%% cycle %u",
+           rtc_saved_temp / 10.0f, rtc_saved_humi, rtc_wake_count);
+  return true;
+}
+
+bool ShellyHTDisplay::get_system_time_(int &hour, int &min) {
+  struct timeval tv;
+  gettimeofday(&tv, nullptr);
+  // Before ~2024 = clock never synced (still at epoch)
+  if (tv.tv_sec < 1704067200) return false;
+  struct tm tm;
+  localtime_r(&tv.tv_sec, &tm);
+  hour = tm.tm_hour;
+  min = tm.tm_min;
   return true;
 }
 
@@ -292,7 +300,7 @@ void ShellyHTDisplay::check_and_update_() {
     new_temp = (int)roundf(this->temp_sensor_->state * 10.0f);
     new_humi = (int)this->humi_sensor_->state;
     raw_temp = this->temp_sensor_->state;
-  } else if (this->wifi_skipped_ && rtc_time_magic == RTC_TIME_MAGIC) {
+  } else if (this->wifi_skipped_ && rtc_state_magic == RTC_STATE_MAGIC) {
     new_temp = rtc_saved_temp;
     new_humi = rtc_saved_humi;
     raw_temp = rtc_saved_temp / 10.0f;
@@ -301,18 +309,9 @@ void ShellyHTDisplay::check_and_update_() {
     return;
   }
 
-  // Time: use RTC time if WiFi was skipped, otherwise HA time
+  // Time: always read from ESP32 system clock (persists across deep sleep)
   int new_hour = -1, new_min = -1;
-  if (this->wifi_skipped_) {
-    new_hour = this->rtc_hour_;
-    new_min = this->rtc_min_;
-  } else if (this->time_) {
-    auto now = this->time_->now();
-    if (now.is_valid()) {
-      new_hour = now.hour;
-      new_min = now.minute;
-    }
-  }
+  this->get_system_time_(new_hour, new_min);
 
   // Signal bars: 0 if WiFi skipped, otherwise from RSSI
   int new_bars = 0;
@@ -364,10 +363,8 @@ void ShellyHTDisplay::check_and_update_() {
   this->disp_vent_ = new_vent;       this->disp_bt_ = new_bt;
   this->disp_calendar_ = new_calendar; this->disp_arrow_ = new_arrow;
 
-  // Save HA-synced time to RTC (only on WiFi cycles when time changed)
-  if (!this->wifi_skipped_ && new_hour >= 0) {
-    this->save_time_to_rtc_();
-  }
+  // Cache sensor data to RTC for fast non-WiFi wakes
+  this->save_state_to_rtc_();
 
   // Build framebuffer
   this->display_->clear();
@@ -399,7 +396,6 @@ void ShellyHTDisplay::check_and_update_() {
 
   // Non-WiFi cycle: display is done, fire on_ready for power_off + sleep
   if (this->wifi_skipped_) {
-    this->save_time_to_rtc_();
     this->on_ready_trigger_.trigger();
   }
 }
@@ -415,32 +411,31 @@ void ShellyHTDisplay::setup() {
   }
 
   // Deep sleep WiFi optimization
+  // The ESP32 system clock persists across deep sleep — after one SNTP sync,
+  // gettimeofday() returns the correct time on every subsequent wake.
   if (this->deep_sleep_mode_ && this->wifi_update_every_ > 0) {
-    if (this->load_time_from_rtc_()) {
-      rtc_wake_count++;
+    int h, m;
+    bool clock_valid = this->get_system_time_(h, m);
+    bool has_state = this->has_cached_state_();
 
+    if (clock_valid && has_state) {
+      // Warm boot: system clock running, sensor data cached
+      rtc_wake_count++;
       bool wifi_cycle = (rtc_wake_count % this->wifi_update_every_) == 0;
 
       if (!wifi_cycle) {
         wifi::global_wifi_component->disable();
         this->wifi_skipped_ = true;
-
-        int32_t total_sec = rtc_saved_total_sec + (int32_t)(this->sleep_duration_ms_ / 1000);
-        total_sec = ((total_sec % 86400) + 86400) % 86400;  // wrap at 24h
-        this->rtc_hour_ = (total_sec / 3600) % 24;
-        this->rtc_min_ = (total_sec % 3600) / 60;
-
-        ESP_LOGI(TAG, "No-WiFi wake %u/%u, time %02d:%02d (+%us)",
-                 rtc_wake_count, this->wifi_update_every_,
-                 this->rtc_hour_, this->rtc_min_,
-                 this->sleep_duration_ms_ / 1000);
+        ESP_LOGI(TAG, "No-WiFi wake %u/%u, clock %02d:%02d",
+                 rtc_wake_count, this->wifi_update_every_, h, m);
       } else {
-        ESP_LOGI(TAG, "WiFi wake %u/%u",
+        ESP_LOGI(TAG, "WiFi wake %u/%u (SNTP re-sync)",
                  rtc_wake_count, this->wifi_update_every_);
       }
     } else {
       rtc_wake_count = 0;
-      ESP_LOGI(TAG, "First boot, WiFi sync needed");
+      ESP_LOGI(TAG, "First boot (clock=%s state=%s), WiFi needed",
+               clock_valid ? "ok" : "unset", has_state ? "ok" : "empty");
     }
   }
 
@@ -448,16 +443,15 @@ void ShellyHTDisplay::setup() {
            this->deep_sleep_mode_ ? "deep-sleep" : "always-on",
            this->is_battery_present() ? "battery" : "USB");
 
-  // Register time sync callback — SNTP often syncs after WiFi connects,
-  // which may be after our regular update() cycle. This ensures we catch
-  // the sync, update the display with the correct time, and save to RTC
-  // before deep_sleep kicks in.
+  // Register time sync callback — on first boot, SNTP syncs after WiFi
+  // connects (settimeofday). This triggers an immediate display update
+  // so the clock shows before deep_sleep timeout kicks in.
   if (this->time_) {
     this->time_->add_on_time_sync_callback([this]() {
-      auto now = this->time_->now();
-      if (now.is_valid()) {
-        ESP_LOGI(TAG, "Time synced: %02d:%02d, forcing display update", now.hour, now.minute);
-        this->force_refresh();     // invalidate cache so check_and_update_ writes
+      int h, m;
+      if (this->get_system_time_(h, m)) {
+        ESP_LOGI(TAG, "Time synced: %02d:%02d, forcing display update", h, m);
+        this->force_refresh();
         this->check_and_update_();
       }
     });
@@ -490,10 +484,8 @@ void ShellyHTDisplay::dump_config() {
                 this->time_ ? "yes" : "no");
   if (this->deep_sleep_mode_) {
     ESP_LOGCONFIG(TAG,
-                  "  WiFi every: %u cycles\n"
-                  "  Sleep duration: %us",
-                  this->wifi_update_every_,
-                  this->sleep_duration_ms_ / 1000);
+                  "  WiFi every: %u cycles",
+                  this->wifi_update_every_);
   }
   ESP_LOGCONFIG(TAG,
                 "  Battery: adc=%s presence=%s power_en=%s\n"

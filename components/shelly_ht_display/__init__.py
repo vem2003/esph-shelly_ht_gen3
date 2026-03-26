@@ -153,11 +153,9 @@ async def to_code(config):
     cg.add(var.set_font(config[CONF_FONT]))
     cg.add(var.set_wifi_update_every(config[CONF_WIFI_UPDATE_EVERY]))
 
-    # Auto-detect deep_sleep and extract sleep_duration
+    # Auto-detect deep_sleep mode from YAML
     is_deep_sleep = "deep_sleep" in CORE.config
     cg.add(var.set_deep_sleep_mode(is_deep_sleep))
-    if is_deep_sleep and "sleep_duration" in CORE.config["deep_sleep"]:
-        cg.add(var.set_sleep_duration(CORE.config["deep_sleep"]["sleep_duration"]))
 
     # ── Input sensors ────────────────────────────────────────────
     for conf_key, setter in [

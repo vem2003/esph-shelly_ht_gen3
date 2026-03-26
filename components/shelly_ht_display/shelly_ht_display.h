@@ -75,7 +75,6 @@ class ShellyHTDisplay : public PollingComponent {
   void set_deep_sleep_mode(bool v) { this->deep_sleep_mode_ = v; }
   void set_font(SegmentFont f) { this->font_ = f; }
   void set_wifi_update_every(uint32_t n) { this->wifi_update_every_ = n; }
-  void set_sleep_duration(uint32_t ms) { this->sleep_duration_ms_ = ms; }
 
   // ── Input sensor references ───────────────────────────────────
   void set_temperature_sensor(sensor::Sensor *s) { this->temp_sensor_ = s; }
@@ -157,10 +156,7 @@ class ShellyHTDisplay : public PollingComponent {
 
   // Deep sleep WiFi optimization
   uint32_t wifi_update_every_{5};
-  uint32_t sleep_duration_ms_{60000};
   bool wifi_skipped_{false};
-  int rtc_hour_{-1};
-  int rtc_min_{-1};
 
   // Input sensors
   sensor::Sensor *temp_sensor_{nullptr};
@@ -220,9 +216,10 @@ class ShellyHTDisplay : public PollingComponent {
   // Battery internals
   void read_battery_();
 
-  // RTC time tracking
-  void save_time_to_rtc_();
-  bool load_time_from_rtc_();
+  // State persistence (sensor cache across deep sleep)
+  void save_state_to_rtc_();
+  bool has_cached_state_();
+  bool get_system_time_(int &hour, int &min);
 };
 
 }  // namespace shelly_htg3
