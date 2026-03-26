@@ -50,10 +50,12 @@ Requires a custom ESPHome external component for the UC8119 display — the firs
 | BUSY_N | GPIO6 | — | LOW=busy, external pull-up |
 | Enable | GPIO10 | — | Display power gate, HIGH=on |
 | Button | GPIO0 | — | XTAL_32K_P, pull-up |
-| Battery ADC | GPIO2 | — | Via voltage divider |
+| Battery ADC | GPIO4 | — | Via voltage divider |
+| Battery presence | GPIO5 | — | High when Battery are connectred |
+| Battery power enable | GPIO18 | Enables Power-Path for Battery |
+| Power Rail ADC | GPIO2 | — | Via voltage divider |
 | SHT31 | — | 0x44 | Temperature + humidity sensor |
 | UC8119 | — | 0x50 | Segment EPD controller |
-
 
 ## Serial Pinout (Debug Header)
 
@@ -61,7 +63,7 @@ Requires a custom ESPHome external component for the UC8119 display — the firs
 
 | Pad | Function |
 |-----|----------|
-| 1   | NC       |
+| 1   | Not Found |
 | 2   | RXD      |
 | 3   | CHIP_EN  |
 | 4   | GND      |
@@ -69,10 +71,11 @@ Requires a custom ESPHome external component for the UC8119 display — the firs
 | 6   | VCC 3V3  |
 | 7   | BOOT / GPIO9 |
 
+
 ### Flashing
 
 > **Note:** OTA flashing from the original Shelly firmware is **not possible**.
-> Shelly Gen3+ verifies OTA images with an ECDSA signature using their private key.
+> Shelly Gen3+ (Firmware v1.5+) verifies OTA images with an ECDSA signature using their private key.
 > The device must be flashed via UART.
 
 To enter download mode, hold **IO9** low (connect to GND) while powering on the device. Release after boot.
@@ -158,7 +161,7 @@ esptool.py --chip esp32c3 --port /dev/ttyUSB0 --baud 460800 \
 
 ## Notes
 - The display layer reads sensor values from RAM (no I2C), so sensor reads and display writes never collide on the shared I2C bus.
-- Button actions: short press = force refresh, double click = ghost clear, long press (3s) = reboot.
+- Button actions: short press = force refresh, double click = ghost clear, long press (3s) = reboot. In Deep-Sleep it acts as the Wake-Up-Button.
 - Font selection: `siekoo` (default, confusion-free) or `classic` (traditional 7-segment).
 
 <!-- LICENSE -->
