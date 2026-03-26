@@ -52,7 +52,7 @@ Requires a custom ESPHome external component for the UC8119 display — the firs
 | Button | GPIO0 | — | XTAL_32K_P, pull-up |
 | Battery ADC | GPIO4 | — | Via voltage divider |
 | Battery presence | GPIO5 | — | High when Battery are connectred |
-| Battery power enable | GPIO18 | - |Enables Power-Path for Battery |
+| Battery power enable | GPIO18 | — |Enables Power-Path for Battery |
 | Power Rail ADC | GPIO2 | — | Via voltage divider |
 | SHT31 | — | 0x44 | Temperature + humidity sensor |
 | UC8119 | — | 0x50 | Segment EPD controller |
