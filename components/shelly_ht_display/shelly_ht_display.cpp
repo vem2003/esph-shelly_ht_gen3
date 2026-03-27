@@ -264,7 +264,7 @@ void ShellyHTDisplay::show_ota_progress(float progress) {
   else if (progress >= 60.0f) { h2 = SEG7_COLON; }
   else if (progress >= 40.0f) { h2 = SEG7_MINUS; }
   else if (progress >= 20.0f) { h2 = SEG7_DOT; }
-  else                        { h2 = SK_N; }
+  else                        { h2 = S7_BLANK; }
   this->write_digit_(DIG_H1, h1);
   this->write_digit_(DIG_H2, h2);
   this->display_->commit();
@@ -273,8 +273,8 @@ void ShellyHTDisplay::show_ota_progress(float progress) {
 void ShellyHTDisplay::show_ota_end() {
   this->display_->clear();
   this->show_text_clock("donE");
-  this->write_digit_(DIG_H1, S7_BLANK);
-  this->write_digit_(DIG_H2, SK_EXCLAIM);
+  this->write_digit_(DIG_H1, SEG7_LPAREN);
+  this->write_digit_(DIG_H2, SEG7_RPAREN);
   this->display_->commit();
   ESP_LOGI(TAG, "OTA complete");
 }
