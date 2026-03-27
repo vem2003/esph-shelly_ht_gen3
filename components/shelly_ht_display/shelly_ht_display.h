@@ -22,7 +22,7 @@
 #include "esphome/components/output/binary_output.h"
 #include "esphome/components/time/real_time_clock.h"
 #include "esphome/components/voltage_sampler/voltage_sampler.h"
-#include "siekoo.h"
+#include "seg7alpha.h"
 
 namespace esphome {
 
@@ -31,7 +31,7 @@ namespace uc8119 { class UC8119; }
 namespace shelly_htg3 {
 
 enum SegmentFont : uint8_t {
-  FONT_SIEKOO = 0,   // Siekoo by Alexander Fakoo — confusion-free (default)
+  FONT_SEG7 = 0,     // AI Generated 
   FONT_CLASSIC = 1,  // Traditional 7-segment (O=0, I=1, S=5 ambiguity)
 };
 
@@ -151,7 +151,7 @@ class ShellyHTDisplay : public PollingComponent {
  protected:
   uc8119::UC8119 *display_{nullptr};
   bool deep_sleep_mode_{false};
-  SegmentFont font_{FONT_SIEKOO};
+  SegmentFont font_{FONT_SEG7};
   bool ota_active_{false};
 
   // Deep sleep WiFi optimization

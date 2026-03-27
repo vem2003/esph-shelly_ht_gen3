@@ -27,7 +27,7 @@ static const uint32_t RTC_STATE_MAGIC = 0x53544154;  // "STAT"
 namespace esphome {
 namespace shelly_htg3 {
 
-static const char *const TAG = "shelly_ht";
+static const char *const TAG = "shelly_ht_gen3";
 
 // ── Battery read cycle ─────────────────────────────────────────
 
@@ -138,8 +138,8 @@ void ShellyHTDisplay::write_number_(const DigitMap &d, int8_t n) {
 }
 
 uint8_t ShellyHTDisplay::char_to_seg7_(char c) {
-  if (this->font_ == FONT_SIEKOO)
-    return siekoo_encode(c);
+  if (this->font_ == FONT_SEG7)
+    return seg7_encode(c);
 
   if (c >= '0' && c <= '9') return S7_NUM[c - '0'];
   switch (c) {
@@ -183,7 +183,7 @@ void ShellyHTDisplay::show_temperature(float t, bool f) {
   this->write_number_(DIG_D3, dec);
   this->show_dp(true);
   this->show_degree(true);
-  char unit_c = (this->font_ == FONT_SIEKOO) ? '(' : 'C';
+  char unit_c = (this->font_ == FONT_SEG7) ? '(' : 'C';
   this->show_unit(f ? 'F' : unit_c);
 }
 
@@ -248,7 +248,7 @@ void ShellyHTDisplay::show_colon(bool on) {
 void ShellyHTDisplay::show_ota_begin() {
   this->ota_active_ = true;
   this->display_->clear();
-  this->show_text_clock(this->font_ == FONT_SIEKOO ? " E5P" : " ESP");
+  this->show_text_clock(this->font_ == FONT_SEG7 ? " E5P" : " ESP");
   this->show_text_big("otA");
   this->write_digit_(DIG_H1, S7_BLANK);
   this->write_digit_(DIG_H2, SK_DOT);
@@ -500,7 +500,7 @@ void ShellyHTDisplay::dump_config() {
                 "  Update interval: %ums\n"
                 "  Sensors: temp=%s humi=%s wifi=%s time=%s",
                 this->deep_sleep_mode_ ? "deep-sleep" : "always-on",
-                this->font_ == FONT_SIEKOO ? "siekoo" : "classic",
+                this->font_ == FONT_SEG7 ? "seg7alpha" : "classic",
                 this->get_update_interval(),
                 this->temp_sensor_ ? "yes" : "no",
                 this->humi_sensor_ ? "yes" : "no",
