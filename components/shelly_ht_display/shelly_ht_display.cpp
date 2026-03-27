@@ -251,7 +251,7 @@ void ShellyHTDisplay::show_ota_begin() {
   this->show_text_clock(this->font_ == FONT_SEG7 ? " E5P" : " ESP");
   this->show_text_big("otA");
   this->write_digit_(DIG_H1, S7_BLANK);
-  this->write_digit_(DIG_H2, SK_DOT);
+  this->write_digit_(DIG_H2, SEG7_DOT);
   this->display_->commit();
   ESP_LOGI(TAG, "OTA begin");
 }
@@ -259,9 +259,11 @@ void ShellyHTDisplay::show_ota_begin() {
 void ShellyHTDisplay::show_ota_progress(float progress) {
   if (!this->ota_active_) return;
   uint8_t h1 = S7_BLANK, h2 = S7_BLANK;
-  if (progress >= 100.0f)     { h2 = SK_EXCLAIM; }
-  else if (progress >= 66.0f) { h2 = SK_W; }
-  else if (progress >= 33.0f) { h2 = SK_M; }
+  if (progress >= 100.0f)     { h2 = SEG7_ASTERISK; }
+  else if (progress >= 80.0f) { h2 = SEG7_EQUAL; }
+  else if (progress >= 60.0f) { h2 = SEG7_COLON; }
+  else if (progress >= 40.0f) { h2 = SEG7_MINUS; }
+  else if (progress >= 20.0f) { h2 = SEG7_DOT; }
   else                        { h2 = SK_N; }
   this->write_digit_(DIG_H1, h1);
   this->write_digit_(DIG_H2, h2);
