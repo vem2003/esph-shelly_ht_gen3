@@ -31,6 +31,7 @@ ShellyHTDisplay = shelly_htg3_ns.class_("ShellyHTDisplay", cg.PollingComponent)
 
 SegmentFont = shelly_htg3_ns.enum("SegmentFont")
 FONT_OPTIONS = {
+    "siekoo": SegmentFont.FONT_SIEKOO,
     "seg7alpha": SegmentFont.FONT_SEG7,
     "classic": SegmentFont.FONT_CLASSIC,
 }
@@ -76,7 +77,7 @@ CONFIG_SCHEMA = (
             cv.GenerateID(): cv.declare_id(ShellyHTDisplay),
             cv.Required(CONF_DISPLAY_ID): cv.use_id(UC8119),
             # Font
-            cv.Optional(CONF_FONT, default="seg7alpha"): cv.enum(
+            cv.Optional(CONF_FONT, default="siekoo"): cv.enum(
                 FONT_OPTIONS, lower=True
             ),
             # Deep sleep: connect WiFi only every Nth wake cycle (0=always)
