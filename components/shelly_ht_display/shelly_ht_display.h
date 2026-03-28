@@ -23,6 +23,7 @@
 #include "esphome/components/time/real_time_clock.h"
 #include "esphome/components/voltage_sampler/voltage_sampler.h"
 #include "seg7alpha.h"
+#include "siekoo.h"
 
 namespace esphome {
 
@@ -31,8 +32,9 @@ namespace uc8119 { class UC8119; }
 namespace shelly_htg3 {
 
 enum SegmentFont : uint8_t {
-  FONT_SEG7 = 0,     // AI Generated 
-  FONT_CLASSIC = 1,  // Traditional 7-segment (O=0, I=1, S=5 ambiguity)
+  FONT_SIEKOO = 0,   // Siekoo by Alexander Fakoo — confusion-free (default)
+  FONT_SEG7 = 1,     // AI Generated 
+  FONT_CLASSIC = 2,  // Traditional 7-segment (O=0, I=1, S=5 ambiguity)
 };
 
 // ── Segment mapping (Shelly H&T Gen3 LCD panel) ────────────────

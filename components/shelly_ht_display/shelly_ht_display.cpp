@@ -138,6 +138,10 @@ void ShellyHTDisplay::write_number_(const DigitMap &d, int8_t n) {
 }
 
 uint8_t ShellyHTDisplay::char_to_seg7_(char c) {
+  
+  if (this->font_ == FONT_SIEKOO)
+    return siekoo_encode(c);
+
   if (this->font_ == FONT_SEG7)
     return seg7_encode(c);
 
@@ -183,7 +187,7 @@ void ShellyHTDisplay::show_temperature(float t, bool f) {
   this->write_number_(DIG_D3, dec);
   this->show_dp(true);
   this->show_degree(true);
-  char unit_c = (this->font_ == FONT_SEG7) ? '(' : 'C';
+  char unit_c = (this->font_ == FONT_SIEKOO) ? '(' : 'C';
   this->show_unit(f ? 'F' : unit_c);
 }
 
@@ -248,7 +252,7 @@ void ShellyHTDisplay::show_colon(bool on) {
 void ShellyHTDisplay::show_ota_begin() {
   this->ota_active_ = true;
   this->display_->clear();
-  this->show_text_clock(this->font_ == FONT_SEG7 ? " E5P" : " ESP");
+  this->show_text_clock(this->font_ == FONT_SIEKOO ? " E5P" : " ESP");
   this->show_text_big("otA");
   this->write_digit_(DIG_H1, S7_BLANK);
   this->write_digit_(DIG_H2, SEG7_DOT);
