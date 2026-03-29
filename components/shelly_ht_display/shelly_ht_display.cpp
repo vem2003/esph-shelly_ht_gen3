@@ -199,12 +199,46 @@ void ShellyHTDisplay::show_humidity(int h) {
 }
 
 void ShellyHTDisplay::show_time(int h, int m) {
-  this->write_number_(DIG_T1, h / 10);
-  this->write_number_(DIG_T2, h % 10);
+  bool is_pm = false;
+  int display_h = h;
+
+  if (this->time_format_ == TIME_12H) {
+    is_pm = (h >= 12);
+    display_h = h % 12;
+    if (display_h == 0) display_h = 12;
+
+    // AM/PM indicator
+    switch (this->am_pm_indicator_) {
+      case AMPM_ARROW:
+        this->show_arrow(is_pm);
+        break;
+      case AMPM_LEADING_ZERO:
+        // Leading zero for AM, blank for PM (handled below)
+        break;
+      case AMPM_NONE:
+      default:
+        break;
+    }
+
+    // First digit
+    if (display_h >= 10) {
+      this->write_number_(DIG_T1, display_h / 10);
+    } else if (this->am_pm_indicator_ == AMPM_LEADING_ZERO && !is_pm) {
+      this->write_number_(DIG_T1, 0);  // AM: show leading zero
+    } else {
+      this->write_digit_(DIG_T1, S7_BLANK);  // PM or none: blank
+    }
+  } else {
+    // 24h format
+    this->write_number_(DIG_T1, display_h / 10);
+  }
+
+  this->write_number_(DIG_T2, display_h % 10);
   this->write_number_(DIG_T3, m / 10);
   this->write_number_(DIG_T4, m % 10);
   this->show_colon(true);
 }
+
 
 void ShellyHTDisplay::show_text_big(const char *t) {
   const DigitMap *d[] = {&DIG_D1, &DIG_D2, &DIG_D3};

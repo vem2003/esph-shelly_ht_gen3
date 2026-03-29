@@ -36,6 +36,26 @@ FONT_OPTIONS = {
     "classic": SegmentFont.FONT_CLASSIC,
 }
 
+
+TemperatureUnit = uc8119_ns.enum("TemperatureUnit")
+TEMP_UNIT_OPTIONS = {
+    "C": TemperatureUnit.TEMP_CELSIUS,
+    "F": TemperatureUnit.TEMP_FAHRENHEIT,
+}
+
+TimeFormat = uc8119_ns.enum("TimeFormat")
+TIME_FORMAT_OPTIONS = {
+    "24h": TimeFormat.TIME_24H,
+    "12h": TimeFormat.TIME_12H,
+}
+
+AmPmIndicator = uc8119_ns.enum("AmPmIndicator")
+AM_PM_OPTIONS = {
+    "none": AmPmIndicator.AMPM_NONE,
+    "leading_zero": AmPmIndicator.AMPM_LEADING_ZERO,
+    "arrow": AmPmIndicator.AMPM_ARROW,
+}
+
 # Config keys
 CONF_DISPLAY_ID = "display_id"
 CONF_FONT = "font"
@@ -71,6 +91,10 @@ CONF_BATTERY_PERCENT = "battery_percent"
 CONF_EXTERNAL_POWER = "external_power"
 CONF_BATTERY_UPDATE_INTERVAL = "battery_update_interval"
 
+CONF_TEMPERATURE_UNIT = "temperature_unit"
+CONF_TIME_FORMAT = "time_format"
+CONF_AM_PM_INDICATOR = "am_pm_indicator"
+
 CONFIG_SCHEMA = (
     cv.Schema(
         {
@@ -80,6 +104,9 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_FONT, default="siekoo"): cv.enum(
                 FONT_OPTIONS, lower=True
             ),
+            cv.Optional(CONF_TEMPERATURE_UNIT, default="C"): cv.enum(TEMP_UNIT_OPTIONS, upper=True),
+            cv.Optional(CONF_TIME_FORMAT, default="24h"): cv.enum(TIME_FORMAT_OPTIONS, lower=True),
+            cv.Optional(CONF_AM_PM_INDICATOR, default="arrow"): cv.enum(AM_PM_OPTIONS, lower=True),            
             # Deep sleep: connect WiFi only every Nth wake cycle (0=always)
             cv.Optional(CONF_WIFI_UPDATE_EVERY, default=5): cv.uint32_t,
             # ── Input sensors ────────────────────────────────────────
@@ -152,6 +179,9 @@ async def to_code(config):
     display = await cg.get_variable(config[CONF_DISPLAY_ID])
     cg.add(var.set_display(display))
     cg.add(var.set_font(config[CONF_FONT]))
+    cg.add(var.set_temperature_unit(config[CONF_TEMPERATURE_UNIT]))
+    cg.add(var.set_time_format(config[CONF_TIME_FORMAT]))
+    cg.add(var.set_am_pm_indicator(config[CONF_AM_PM_INDICATOR]))    
     cg.add(var.set_wifi_update_every(config[CONF_WIFI_UPDATE_EVERY]))
 
     # Auto-detect deep_sleep mode from YAML

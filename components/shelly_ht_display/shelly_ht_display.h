@@ -37,6 +37,22 @@ enum SegmentFont : uint8_t {
   FONT_CLASSIC = 2,  // Traditional 7-segment (O=0, I=1, S=5 ambiguity)
 };
 
+enum TemperatureUnit : uint8_t {
+  TEMP_CELSIUS = 0,
+  TEMP_FAHRENHEIT = 1,
+};
+
+enum TimeFormat : uint8_t {
+  TIME_24H = 0,
+  TIME_12H = 1,
+};
+
+enum AmPmIndicator : uint8_t {
+  AMPM_NONE = 0,           // No AM/PM indication
+  AMPM_LEADING_ZERO = 1,   // AM: leading zero (08:30), PM: no zero ( 8:30)
+  AMPM_ARROW = 2,          // Arrow icon ON=PM, OFF=AM
+};
+
 // ── Segment mapping (Shelly H&T Gen3 LCD panel) ────────────────
 
 struct DigitMap { uint8_t a, b, c, d, e, f, g; };
@@ -154,6 +170,9 @@ class ShellyHTDisplay : public PollingComponent {
   uc8119::UC8119 *display_{nullptr};
   bool deep_sleep_mode_{false};
   SegmentFont font_{FONT_SEG7};
+  TemperatureUnit temp_unit_{TEMP_CELSIUS};
+  TimeFormat time_format_{TIME_24H};
+  AmPmIndicator am_pm_indicator_{AMPM_ARROW};  
   bool ota_active_{false};
 
   // Deep sleep WiFi optimization
