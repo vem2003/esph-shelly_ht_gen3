@@ -37,19 +37,19 @@ FONT_OPTIONS = {
 }
 
 
-TemperatureUnit = uc8119_ns.enum("TemperatureUnit")
+TemperatureUnit = shelly_htg3_ns.enum("TemperatureUnit")
 TEMP_UNIT_OPTIONS = {
     "C": TemperatureUnit.TEMP_CELSIUS,
     "F": TemperatureUnit.TEMP_FAHRENHEIT,
 }
 
-TimeFormat = uc8119_ns.enum("TimeFormat")
+TimeFormat = shelly_htg3_ns.enum("TimeFormat")
 TIME_FORMAT_OPTIONS = {
     "24h": TimeFormat.TIME_24H,
     "12h": TimeFormat.TIME_12H,
 }
 
-AmPmIndicator = uc8119_ns.enum("AmPmIndicator")
+AmPmIndicator = shelly_htg3_ns.enum("AmPmIndicator")
 AM_PM_OPTIONS = {
     "none": AmPmIndicator.AMPM_NONE,
     "leading_zero": AmPmIndicator.AMPM_LEADING_ZERO,
