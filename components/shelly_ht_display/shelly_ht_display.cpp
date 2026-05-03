@@ -85,10 +85,9 @@ int ShellyHTDisplay::get_battery_segments() const {
     return 0;
   float p = this->batt_percent_sensor_->state;
   if (std::isnan(p)) return 0;
-  if (p >= 80) return 5;
-  if (p >= 60) return 4;
-  if (p >= 40) return 3;
-  if (p >= 20) return 2;
+  if (p >= 75) return 4;
+  if (p >= 50) return 3;
+  if (p >= 25) return 2;
   if (p > 0)   return 1;
   return 0;
 }
