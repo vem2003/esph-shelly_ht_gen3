@@ -194,7 +194,7 @@ void ShellyHTDisplay::show_humidity(int h) {
   if (h < 0) h = 0; if (h > 99) h = 99;
   this->write_digit_(DIG_H1, h / 10 > 0 ? S7_NUM[h / 10] : S7_BLANK);
   this->write_number_(DIG_H2, h % 10);
-  this->show_percent(true);
+  //this->show_percent(true);
 }
 
 void ShellyHTDisplay::show_time(int h, int m) {
