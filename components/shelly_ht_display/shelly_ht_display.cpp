@@ -380,13 +380,13 @@ void ShellyHTDisplay::check_and_update_() {
   bool new_arrow    = this->get_icon_state_(this->arrow_sensor_, false);
 
   // Changed?
-  bool changed = //(new_temp     != this->disp_temp_)     ||
-                 //(new_humi     != this->disp_humi_)     ||
-                 (new_hour     != this->disp_hour_)     ||
+  bool changed = (new_hour     != this->disp_hour_)     ||
                  (new_min      != this->disp_min_)      ||
                  (new_bars     != this->disp_bars_)     ||
                  (new_wifi     != this->disp_wifi_)     ||
                  //(new_frost    != this->disp_frost_)    ||
+                 //(new_temp     != this->disp_temp_)     ||
+                 //(new_humi     != this->disp_humi_)     ||
                  (new_heating  != this->disp_heating_)  ||
                  (new_vent     != this->disp_vent_)     ||
                  (new_bt       != this->disp_bt_)       ||
