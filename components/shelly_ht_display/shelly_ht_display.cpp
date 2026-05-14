@@ -333,7 +333,7 @@ void ShellyHTDisplay::check_and_update_() {
   if (this->ota_active_) return;
   if (!this->display_ || !this->display_->is_ready()) return;
 
-  bool has_t = this->temp_sensor_ && this->temp_sensor_->has_state();
+  /*bool has_t = this->temp_sensor_ && this->temp_sensor_->has_state();
   bool has_h = this->humi_sensor_ && this->humi_sensor_->has_state();
 
   int new_temp, new_humi;
@@ -350,7 +350,7 @@ void ShellyHTDisplay::check_and_update_() {
     ESP_LOGD(TAG, "Sensor not ready, using RTC: %.1fC %d%%", raw_temp, new_humi);
   } else {
     return;
-  }
+  }*/
 
   // Time: always read from ESP32 system clock (persists across deep sleep)
   int new_hour = -1, new_min = -1;
@@ -380,8 +380,8 @@ void ShellyHTDisplay::check_and_update_() {
   bool new_arrow    = this->get_icon_state_(this->arrow_sensor_, false);
 
   // Changed?
-  bool changed = (new_temp     != this->disp_temp_)     ||
-                 (new_humi     != this->disp_humi_)     ||
+  bool changed = //(new_temp     != this->disp_temp_)     ||
+                 //(new_humi     != this->disp_humi_)     ||
                  (new_hour     != this->disp_hour_)     ||
                  (new_min      != this->disp_min_)      ||
                  (new_bars     != this->disp_bars_)     ||
@@ -395,11 +395,11 @@ void ShellyHTDisplay::check_and_update_() {
 
   if (!changed) return;
 
-  ESP_LOGD(TAG, "Update: %.1fC %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
+  /*ESP_LOGD(TAG, "Update: %.1fC %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
            new_temp / 10.0f, new_humi, new_hour, new_min, new_bars,
-           new_wifi, new_frost, this->wifi_skipped_ ? " [no-wifi]" : "");
+           new_wifi, new_frost, this->wifi_skipped_ ? " [no-wifi]" : "");*/
 
-  this->disp_temp_ = new_temp;       this->disp_humi_ = new_humi;
+  //this->disp_temp_ = new_temp;       this->disp_humi_ = new_humi;
   this->disp_hour_ = new_hour;       this->disp_min_  = new_min;
   this->disp_bars_ = new_bars;       this->disp_wifi_ = new_wifi;
   this->disp_frost_ = new_frost;     this->disp_heating_ = new_heating;
@@ -411,8 +411,8 @@ void ShellyHTDisplay::check_and_update_() {
 
   // Build framebuffer
   this->display_->clear();
-  this->show_temperature(raw_temp, false);
-  this->show_humidity(new_humi);
+  //this->show_temperature(raw_temp, false);
+  //this->show_humidity(new_humi);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
 
