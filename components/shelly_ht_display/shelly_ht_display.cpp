@@ -369,9 +369,9 @@ void ShellyHTDisplay::check_and_update_() {
   }
 
   // Icon states
-  bool def_frost = raw_temp < 3.0f;
+  //bool def_frost = raw_temp < 3.0f;
 
-  bool new_frost    = this->get_icon_state_(this->frost_sensor_, def_frost);
+  //bool new_frost    = this->get_icon_state_(this->frost_sensor_, def_frost);
   bool new_heating  = this->get_icon_state_(this->heating_sensor_, false);
   bool new_vent     = this->get_icon_state_(this->ventilator_sensor_, false);
   bool new_bt       = this->get_icon_state_(this->bluetooth_sensor_, false);
@@ -386,7 +386,7 @@ void ShellyHTDisplay::check_and_update_() {
                  (new_min      != this->disp_min_)      ||
                  (new_bars     != this->disp_bars_)     ||
                  (new_wifi     != this->disp_wifi_)     ||
-                 (new_frost    != this->disp_frost_)    ||
+                 //(new_frost    != this->disp_frost_)    ||
                  (new_heating  != this->disp_heating_)  ||
                  (new_vent     != this->disp_vent_)     ||
                  (new_bt       != this->disp_bt_)       ||
@@ -402,7 +402,7 @@ void ShellyHTDisplay::check_and_update_() {
   //this->disp_temp_ = new_temp;       this->disp_humi_ = new_humi;
   this->disp_hour_ = new_hour;       this->disp_min_  = new_min;
   this->disp_bars_ = new_bars;       this->disp_wifi_ = new_wifi;
-  this->disp_frost_ = new_frost;     this->disp_heating_ = new_heating;
+  /*this->disp_frost_ = new_frost;*/     this->disp_heating_ = new_heating;
   this->disp_vent_ = new_vent;       this->disp_bt_ = new_bt;
   this->disp_calendar_ = new_calendar; this->disp_arrow_ = new_arrow;
 
