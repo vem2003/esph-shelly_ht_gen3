@@ -418,7 +418,7 @@ void ShellyHTDisplay::check_and_update_() {
 
   // Icons
   this->show_globe(new_globe);
-  this->show_frost(new_frost);
+  //this->show_frost(new_frost);
   this->show_heating(new_heating);
   this->show_ventilator(new_vent);
   this->show_bluetooth(new_bt);
