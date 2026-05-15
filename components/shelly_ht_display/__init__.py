@@ -5,6 +5,7 @@ from esphome.components import (
     binary_sensor,
     output,
     time as time_comp,
+    text_sensor as text_sensor,
     voltage_sampler,
 )
 from esphome.const import (
@@ -115,7 +116,7 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_TEMPERATURE_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_WIFI_SIGNAL_SENSOR): cv.use_id(sensor.Sensor),
-            cv.Optional(CONF_VPN_SENSOR): cv.use_id(sensor.Sensor),
+            cv.Optional(CONF_VPN_SENSOR): cv.use_id(text_sensor.TextSensor),
             cv.Optional(CONF_VPN_NUM_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_TIME_ID): cv.use_id(time_comp.RealTimeClock),
             # ── Icon binary_sensor overrides ─────────────────────────
