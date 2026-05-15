@@ -335,9 +335,11 @@ void ShellyHTDisplay::check_and_update_() {
 
   bool has_t = this->temp_sensor_ && this->temp_sensor_->has_state();
   bool has_h = this->humi_sensor_ && this->humi_sensor_->has_state();
+  bool has_v = this->vpn_sensor_ && this->vpn_sensor_->has_state();
 
   int new_temp, new_humi;
   float raw_temp;
+  char new_vpn;
 
   if (has_t && has_h) {
     new_temp = (int)roundf(this->temp_sensor_->state * 10.0f);
@@ -352,6 +354,7 @@ void ShellyHTDisplay::check_and_update_() {
     return;
   }
 
+  new_vpn = this->vpn_sensor_->state;
   // Time: always read from ESP32 system clock (persists across deep sleep)
   int new_hour = -1, new_min = -1;
   this->get_system_time_(new_hour, new_min);
@@ -413,6 +416,7 @@ void ShellyHTDisplay::check_and_update_() {
   this->display_->clear();
   //this->show_temperature(raw_temp, false);
   //this->show_humidity(new_humi);
+  this->show_text_big(new_vpn);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
 
