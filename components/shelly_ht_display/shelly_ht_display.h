@@ -25,6 +25,7 @@
 #include "esphome/components/voltage_sampler/voltage_sampler.h"
 #include "seg7alpha.h"
 #include "siekoo.h"
+#include <string>
 
 namespace esphome {
 
@@ -239,7 +240,7 @@ class ShellyHTDisplay : public PollingComponent {
   bool disp_bt_{false};
   bool disp_calendar_{false};
   bool disp_arrow_{false};
-  string disp_vpn_{'---'};
+  std::string disp_vpn_{"---"};
   
 
   // Internal helpers
