@@ -89,6 +89,10 @@ class ShellyHTDisplay : public PollingComponent {
   void dump_config() override;
   float get_setup_priority() const override { return setup_priority::PROCESSOR; }
 
+  // ── Python Generator Overrides ────────────────────────────────
+  void vpn_sensor(text_sensor::TextSensor *s) { this->vpn_sensor_ = s; }
+  void vpn_num_sensor(sensor::Sensor *s) { this->vpn_number_sensor_ = s; }
+
   // ── General config ────────────────────────────────────────────
   void set_display(uc8119::UC8119 *d) { this->display_ = d; }
   void set_deep_sleep_mode(bool v) { this->deep_sleep_mode_ = v; }
