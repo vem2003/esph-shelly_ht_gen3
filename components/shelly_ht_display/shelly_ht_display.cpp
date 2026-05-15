@@ -355,7 +355,8 @@ void ShellyHTDisplay::check_and_update_() {
     return;
   }
 
-  new_vpn = (int)this->vpn_sensor_->state;
+  new_vpn = this->vpn_sensor_->state;
+  new_vpn_num = (int)this->vpn_number_sensor_->state;
   // Time: always read from ESP32 system clock (persists across deep sleep)
   int new_hour = -1, new_min = -1;
   this->get_system_time_(new_hour, new_min);
@@ -391,6 +392,8 @@ void ShellyHTDisplay::check_and_update_() {
                  (new_frost    != this->disp_frost_)    ||
                  (new_temp     != this->disp_temp_)     ||
                  (new_humi     != this->disp_humi_)     ||
+                 (new_vpn      != this->disp_vpn_)      ||
+                 (new_vpn_num  != this->disp_vpn_num_)  ||
                  (new_heating  != this->disp_heating_)  ||
                  (new_vent     != this->disp_vent_)     ||
                  (new_bt       != this->disp_bt_)       ||
@@ -401,8 +404,9 @@ void ShellyHTDisplay::check_and_update_() {
 
   ESP_LOGD(TAG, "Update: %.1fC %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
            new_temp / 10.0f, new_humi, new_hour, new_min, new_bars,
-           new_wifi, /*new_frost,*/ this->wifi_skipped_ ? " [no-wifi]" : "");
+           new_wifi, new_frost, this->wifi_skipped_ ? " [no-wifi]" : "");
 
+  this->disp_vpn_ = new_vpn;         this->disp_vpn_num_ = new_vpn_num;
   this->disp_temp_ = new_temp;       this->disp_humi_ = new_humi;
   this->disp_hour_ = new_hour;       this->disp_min_  = new_min;
   this->disp_bars_ = new_bars;       this->disp_wifi_ = new_wifi;
