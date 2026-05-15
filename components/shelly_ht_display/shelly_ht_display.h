@@ -103,7 +103,7 @@ class ShellyHTDisplay : public PollingComponent {
   void set_wifi_signal_sensor(sensor::Sensor *s) { this->wifi_sensor_ = s; }
   void set_time(time::RealTimeClock *t) { this->time_ = t; }
   void set_vpn_sensor(sensor::Sensor *s) { this->vpn_sensor_ = s; }
-  void set_vpn_num_sensor(sensor::Sensor *s) { this->num_sensor_ = s; }
+  void set_vpn_num_sensor(sensor::Sensor *s) { this->vpn_number_sensor_ = s; }
 
   // ── Icon binary_sensor overrides ──────────────────────────────
   void set_frost_sensor(binary_sensor::BinarySensor *s) { this->frost_sensor_ = s; }
