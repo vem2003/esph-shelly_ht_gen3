@@ -336,11 +336,11 @@ void ShellyHTDisplay::check_and_update_() {
   bool has_t = this->temp_sensor_ && this->temp_sensor_->has_state();
   bool has_h = this->humi_sensor_ && this->humi_sensor_->has_state();
   bool has_v = this->vpn_sensor_ && this->vpn_sensor_->has_state();
-  bool has_n = this->vpn_number_sensor:_ && this->vpn_number_sensor:_->has_state();
+  bool has_n = this->vpn_number_sensor_ && this->vpn_number_sensor:_->has_state();
 
   int new_temp, new_humi, new_vpn_num;
   float raw_temp;
-  char new_vpn;
+  std::string new_vpn = "";
 
   if (has_t && has_h) {
     new_temp = (int)roundf(this->temp_sensor_->state * 10.0f);
@@ -416,7 +416,7 @@ void ShellyHTDisplay::check_and_update_() {
   // Build framebuffer
   this->display_->clear();
   //this->show_temperature(raw_temp, false);
-  this->show_text_big(new_vpn);
+  this->show_text_big(new_vpn.c_str());
   this->show_humidity(new_vpn_num/*new_humi*/);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
