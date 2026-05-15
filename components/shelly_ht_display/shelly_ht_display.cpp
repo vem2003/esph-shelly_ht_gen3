@@ -333,7 +333,7 @@ void ShellyHTDisplay::check_and_update_() {
   if (this->ota_active_) return;
   if (!this->display_ || !this->display_->is_ready()) return;
 
-  /*bool has_t = this->temp_sensor_ && this->temp_sensor_->has_state();
+  bool has_t = this->temp_sensor_ && this->temp_sensor_->has_state();
   bool has_h = this->humi_sensor_ && this->humi_sensor_->has_state();
 
   int new_temp, new_humi;
@@ -350,7 +350,7 @@ void ShellyHTDisplay::check_and_update_() {
     ESP_LOGD(TAG, "Sensor not ready, using RTC: %.1fC %d%%", raw_temp, new_humi);
   } else {
     return;
-  }*/
+  }
 
   // Time: always read from ESP32 system clock (persists across deep sleep)
   int new_hour = -1, new_min = -1;
@@ -369,7 +369,7 @@ void ShellyHTDisplay::check_and_update_() {
   }
 
   // Icon states
-  //bool def_frost = raw_temp < 3.0f;
+  bool def_frost = raw_temp < 3.0f;
 
   //bool new_frost    = this->get_icon_state_(this->frost_sensor_, def_frost);
   bool new_heating  = this->get_icon_state_(this->heating_sensor_, false);
@@ -395,9 +395,9 @@ void ShellyHTDisplay::check_and_update_() {
 
   if (!changed) return;
 
-  /*ESP_LOGD(TAG, "Update: %.1fC %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
+  ESP_LOGD(TAG, "Update: %.1fC %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
            new_temp / 10.0f, new_humi, new_hour, new_min, new_bars,
-           new_wifi, new_frost, this->wifi_skipped_ ? " [no-wifi]" : "");*/
+           new_wifi, new_frost, this->wifi_skipped_ ? " [no-wifi]" : "");
 
   //this->disp_temp_ = new_temp;       this->disp_humi_ = new_humi;
   this->disp_hour_ = new_hour;       this->disp_min_  = new_min;
