@@ -402,7 +402,7 @@ void ShellyHTDisplay::check_and_update_() {
                  (new_calendar != this->disp_calendar_) ||
                  (new_arrow    != this->disp_arrow_);
 
-  //if (!changed) return;
+  if (!changed) return;
 
   ESP_LOGD(TAG, "Update: %.1fC %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
            new_temp / 10.0f, new_humi, new_hour, new_min, new_bars,
@@ -426,6 +426,7 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_humidity(new_vpn_num/*new_humi*/);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
+  this->show_arrow(ext_power_sensor_->state);
 
   // Icons
   this->show_globe(new_globe);
