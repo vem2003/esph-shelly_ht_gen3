@@ -67,6 +67,8 @@ CONF_ON_READY = "on_ready"
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_WIFI_SIGNAL_SENSOR = "wifi_signal_sensor"
+CONF_VPN_SENSOR = "vpn_sensor"
+CONF_VPN_NUM_SENSOR = "vpn_num_sensor"
 
 # Icon binary_sensor overrides
 CONF_FROST_SENSOR = "frost_sensor"
@@ -113,6 +115,8 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_TEMPERATURE_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_WIFI_SIGNAL_SENSOR): cv.use_id(sensor.Sensor),
+            cv.Optional(CONF_VPN_SENSOR): cv.use_id(sensor.Sensor),
+            cv.Optional(CONF_VPN_NUM_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_TIME_ID): cv.use_id(time_comp.RealTimeClock),
             # ── Icon binary_sensor overrides ─────────────────────────
             cv.Optional(CONF_FROST_SENSOR): cv.use_id(binary_sensor.BinarySensor),
@@ -193,6 +197,8 @@ async def to_code(config):
         (CONF_TEMPERATURE_SENSOR, "set_temperature_sensor"),
         (CONF_HUMIDITY_SENSOR, "set_humidity_sensor"),
         (CONF_WIFI_SIGNAL_SENSOR, "set_wifi_signal_sensor"),
+        (CONF_VPN_SENSOR, "vpn_sensor"),
+        (CONF_VPN_NUM_SENSOR, "vpn_num_sensor"),
     ]:
         if conf_key in config:
             s = await cg.get_variable(config[conf_key])
