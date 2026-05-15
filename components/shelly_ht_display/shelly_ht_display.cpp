@@ -342,10 +342,12 @@ void ShellyHTDisplay::check_and_update_() {
   float raw_temp;
   std::string new_vpn = "";
 
-  if (has_t && has_h) {
+  if (has_t && has_h && has_v && has_n) {
     new_temp = (int)roundf(this->temp_sensor_->state * 10.0f);
     new_humi = (int)this->humi_sensor_->state;
     raw_temp = this->temp_sensor_->state;
+    new_vpn = this->vpn_sensor_->state;
+    new_vpn_num = (int)this->vpn_number_sensor_->state;
   } else if (this->wifi_skipped_ && rtc_state_magic == RTC_STATE_MAGIC) {
     new_temp = rtc_saved_temp;
     new_humi = rtc_saved_humi;
