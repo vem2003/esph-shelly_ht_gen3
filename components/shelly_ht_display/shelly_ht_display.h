@@ -231,6 +231,7 @@ class ShellyHTDisplay : public PollingComponent {
   int disp_hour_{-1};
   int disp_min_{-1};
   int disp_bars_{-1};
+  int disp_vpn_number_{false};
   bool disp_wifi_{false};
   bool disp_frost_{false};
   bool disp_heating_{false};
@@ -238,6 +239,8 @@ class ShellyHTDisplay : public PollingComponent {
   bool disp_bt_{false};
   bool disp_calendar_{false};
   bool disp_arrow_{false};
+  string disp_vpn_{'---'};
+  
 
   // Internal helpers
   void check_and_update_();
