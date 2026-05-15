@@ -336,7 +336,7 @@ void ShellyHTDisplay::check_and_update_() {
   bool has_t = this->temp_sensor_ && this->temp_sensor_->has_state();
   bool has_h = this->humi_sensor_ && this->humi_sensor_->has_state();
   bool has_v = this->vpn_sensor_ && this->vpn_sensor_->has_state();
-  bool has_v = this->vpn_number_sensor:_ && this->vpn_number_sensor:_->has_state();
+  bool has_n = this->vpn_number_sensor:_ && this->vpn_number_sensor:_->has_state();
 
   int new_temp, new_humi, new_vpn_num;
   float raw_temp;
