@@ -397,7 +397,7 @@ void ShellyHTDisplay::check_and_update_() {
 
   ESP_LOGD(TAG, "Update: %.1fC %d%% %02d:%02d sig:%d wifi:%d frost:%d%s",
            new_temp / 10.0f, new_humi, new_hour, new_min, new_bars,
-           new_wifi, new_frost, this->wifi_skipped_ ? " [no-wifi]" : "");
+           new_wifi, /*new_frost,*/ this->wifi_skipped_ ? " [no-wifi]" : "");
 
   //this->disp_temp_ = new_temp;       this->disp_humi_ = new_humi;
   this->disp_hour_ = new_hour;       this->disp_min_  = new_min;
