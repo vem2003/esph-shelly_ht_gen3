@@ -19,6 +19,7 @@
 #include "esphome/core/hal.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/output/binary_output.h"
 #include "esphome/components/time/real_time_clock.h"
 #include "esphome/components/voltage_sampler/voltage_sampler.h"
@@ -102,7 +103,7 @@ class ShellyHTDisplay : public PollingComponent {
   void set_humidity_sensor(sensor::Sensor *s) { this->humi_sensor_ = s; }
   void set_wifi_signal_sensor(sensor::Sensor *s) { this->wifi_sensor_ = s; }
   void set_time(time::RealTimeClock *t) { this->time_ = t; }
-  void set_vpn_sensor(sensor::Sensor *s) { this->vpn_sensor_ = s; }
+  void set_vpn_sensor(text_sensor::TextSensor *s) { this->vpn_sensor_ = s; }
   void set_vpn_num_sensor(sensor::Sensor *s) { this->vpn_number_sensor_ = s; }
 
   // ── Icon binary_sensor overrides ──────────────────────────────
@@ -188,7 +189,7 @@ class ShellyHTDisplay : public PollingComponent {
   sensor::Sensor *temp_sensor_{nullptr};
   sensor::Sensor *humi_sensor_{nullptr};
   sensor::Sensor *wifi_sensor_{nullptr};
-  sensor::Sensor *vpn_sensor_{nullptr};
+  text_sensor::TextSensor *vpn_sensor_{nullptr};
   sensor::Sensor *vpn_number_sensor_{nullptr};
   time::RealTimeClock *time_{nullptr};
 
