@@ -296,14 +296,15 @@ void ShellyHTDisplay::show_ota_begin() {
 void ShellyHTDisplay::show_ota_progress(float progress) {
   if (!this->ota_active_) return;
   uint8_t h1 = S7_BLANK, h2 = S7_BLANK;
-  if (progress >= 100.0f)     { h2 = SEG7_ASTERISK; }
+  /*if (progress >= 100.0f)     { h2 = SEG7_ASTERISK; }
   else if (progress >= 80.0f) { h2 = SEG7_COLON; }
   else if (progress >= 60.0f) { h2 = SEG7_EQUAL; }
   else if (progress >= 40.0f) { h2 = SEG7_MINUS; }
   else if (progress >= 20.0f) { h2 = SEG7_DOT; }
   else                        { h2 = S7_BLANK; }
   this->write_digit_(DIG_H1, h1);
-  this->write_digit_(DIG_H2, h2);
+  this->write_digit_(DIG_H2, h2);*/
+  this->show_humidity((int)progress);
   this->display_->commit();
 }
 
@@ -426,7 +427,7 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_humidity(new_vpn_num/*new_humi*/);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
-  this->show_arrow(ext_power_sensor_->state);
+  this->show_arrow(this->ext_power_sensor_->state);
 
   // Icons
   this->show_globe(new_globe);
