@@ -188,6 +188,8 @@ class ShellyHTDisplay : public PollingComponent {
   sensor::Sensor *temp_sensor_{nullptr};
   sensor::Sensor *humi_sensor_{nullptr};
   sensor::Sensor *wifi_sensor_{nullptr};
+  sensor::Sensor *vpn_sensor_{nullptr};
+  sensor::Sensor *vpn_number_sensor_{nullptr};
   time::RealTimeClock *time_{nullptr};
 
   // Icon binary_sensor overrides
