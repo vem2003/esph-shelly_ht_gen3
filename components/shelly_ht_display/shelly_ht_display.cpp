@@ -295,7 +295,7 @@ void ShellyHTDisplay::show_ota_begin() {
   this->show_text_clock(this->font_ == FONT_SIEKOO ? " E5P" : " ESP");
   this->show_text_big("otA");
   this->write_digit_(DIG_H1, S7_BLANK);
-  this->write_digit_(DIG_H2, SEG7_DOT);
+  this->write_digit_(DIG_H2, SEG7_MINUS /*SEG7_DOT*/);
   this->display_->commit();
   ESP_LOGI(TAG, "OTA begin");
 }
@@ -435,7 +435,7 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_humidity_digits(new_vpn_num);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
-  this->show_arrow(this->is_usb_powered());
+  this->show_arrow(!this->is_battery_present());
 
   // Icons
   this->show_globe(new_globe);
