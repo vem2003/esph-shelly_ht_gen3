@@ -194,6 +194,13 @@ void ShellyHTDisplay::show_humidity(int h) {
   if (h < 0) h = 0; if (h > 99) h = 99;
   this->write_digit_(DIG_H1, h / 10 > 0 ? S7_NUM[h / 10] : S7_BLANK);
   this->write_number_(DIG_H2, h % 10);
+  this->show_percent(true);
+}
+
+void ShellyHTDisplay::show_humidity_digits(int h) {
+  if (h < 0) h = 0; if (h > 99) h = 99;
+  this->write_digit_(DIG_H1, h / 10 > 0 ? S7_NUM[h / 10] : S7_BLANK);
+  this->write_number_(DIG_H2, h % 10);
   //this->show_percent(true);
 }
 
@@ -424,7 +431,8 @@ void ShellyHTDisplay::check_and_update_() {
   this->display_->clear();
   //this->show_temperature(raw_temp, false);
   this->show_text_big(new_vpn.c_str());
-  this->show_humidity(new_vpn_num/*new_humi*/);
+  //this->show_humidity(new_vpn_num/*new_humi*/);
+  this->show_humidity_digits(new_vpn_num);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
   this->show_arrow(this->ext_power_sensor_->state);
