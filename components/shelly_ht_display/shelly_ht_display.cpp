@@ -444,7 +444,7 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_ventilator(new_vent);
   this->show_bluetooth(new_bt);
   this->show_calendar(new_calendar);
-  this->show_arrow(new_arrow);
+  //this->show_arrow(new_arrow);
 
   // Battery: auto-show from percent sensor if available
   if (this->batt_percent_sensor_ && this->batt_percent_sensor_->has_state() &&
