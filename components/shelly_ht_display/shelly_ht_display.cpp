@@ -435,7 +435,7 @@ void ShellyHTDisplay::check_and_update_() {
   this->show_humidity_digits(new_vpn_num);
   if (new_hour >= 0) this->show_time(new_hour, new_min);
   this->show_signal(new_bars);
-  this->show_arrow(this->is_usb_powered->state);
+  this->show_arrow(this->is_usb_powered()->state);
 
   // Icons
   this->show_globe(new_globe);
