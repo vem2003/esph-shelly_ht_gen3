@@ -142,6 +142,7 @@ class ShellyHTDisplay : public PollingComponent {
 
   void show_temperature(float temp_c, bool fahrenheit = false);
   void show_humidity(int humidity);
+  void show_humidity_digits(int humidity);
   void show_time(int hours, int minutes);
   void show_text_big(const char *text);
   void show_text_clock(const char *text);
